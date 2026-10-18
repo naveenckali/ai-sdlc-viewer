@@ -19,7 +19,7 @@ Notes:
 - Copilot CLI and Copilot in VS Code share `~/.copilot/skills` and `.github/skills`, so installing for one makes the skill available to both.
 - Copilot CLI also supports plugins (manifest at the plugin root, `skills/NAME/SKILL.md`; `copilot plugin install ./dir`). The docs page checked does not state that it reads `.claude-plugin/plugin.json`, so plugin-style install for Copilot CLI is `unverified`; use the skills-directory install above.
 - Claude Code in headless (`-p`) runs refuses `cp` that reads from a loaded plugin folder. The skill then writes `data.js` and prints the exact copy commands for you to run. In an interactive session Claude Code asks you to approve the `cp` instead. A copy installed under `~/.claude/skills` is a user skill, not a plugin, so it is not subject to the plugin-folder protection (not separately tested).
-- Only Claude Code (the plugin path, run 7 below) has been run end to end. The other four tools are verified for file locations only; no scan has been run in them.
+- Claude Code (plugin path), Codex and Copilot CLI have each been run on the fixture (see "Cross-tool smoke tests" below). Cursor and Copilot in VS Code are `not yet verified`; their rows are manual checklists.
 - Install commands: `install/install.sh --tool <tool> [--project <repo>]` (bash) or `install/install.ps1 -Tool <tool> [-Project <repo>]` (PowerShell). They print the destination, exit non-zero on an unknown tool, replace an earlier copy of this skill on re-run, and refuse to touch an existing destination that lacks the marker file.
 
 ## End-to-end evaluation
@@ -90,3 +90,41 @@ Notes from earlier runs:
 - **Run 6** (`PASS 71 checks`) still pre-approved `Write`/`Edit` and used older skill text. Its transcript was saved under the label `run5`, then copied to `tmp-fixtures/e2e-run6.json`.
 - **In run 6 the agent also wrote a helper validation script to `%TEMP%`**, which was possible because `Write` was pre-approved. Since then `Write` and `Edit` are no longer pre-approved, and SKILL.md forbids creating files outside the repo or writing helper files for the optional validation. A probe confirmed that, without `Write` pre-approved, writes inside the repo still work and writes to `%TEMP%` are refused.
 - **Run 7** is the final run above. It is the first made with the committed runner and the shipped skill text.
+
+## Cross-tool smoke tests (2026-10-18)
+
+Run with `node tools/run-e2e.js <label> --tool copilot-cli|codex`. For each run the harness builds a fresh fixture copy in `tmp-fixtures/e2e`, installs the skill into it at **project level** (`install/install.sh --tool <tool> --project <fixture>`, never user level), commits the install into the fixture and re-records the file-hash manifest (so "repo modified" compares with the post-install state), runs the tool headless, then runs `check-scan` with `--not-find <installed dir>/SKILL.md` and `--not-find <installed dir>/.ai-sdlc-viewer-plugin` (the installed copy carries the marker and must be excluded). No blanket permission-bypass flag was used for any tool. The user's real `~/.copilot`, `~/.agents`, `~/.codex`, `~/.cursor` and `~/.claude` were not touched.
+
+| Tool | Version | Result | Notes |
+|---|---|---|---|
+| Claude Code (plugin) | 2.1.302 | PASS 85 checks (run 7) | Harness copied the viewer files after Claude Code refused the `cp`; see above. |
+| Codex | codex-cli 0.159.3 | **PASS 86 checks** | `codex exec --sandbox workspace-write -C <fixture> '$ai-sdlc-viewer'`. 98 s. The agent copied all 11 viewer files itself (no harness copy) and its own validation reported no errors or warnings. |
+| Copilot CLI | GitHub Copilot CLI 1.0.100-1 | **FAIL, 7 of 76 checks** (1 run) | `copilot -p /ai-sdlc-viewer --no-ask-user -s --allow-tool=<each of: shell(git ls-files), shell(git rev-parse), shell(git config), shell(pwd), shell(date), shell(ls), shell(mkdir), shell(cp), shell(rm -rf ai-sdlc-viewer), write>`. The skill loaded and produced a mostly correct `data.js`, but see the failures below. |
+| Cursor (GUI) | installed; `cursor-agent` CLI not installed | not yet verified | Manual checklist below. |
+| Copilot in VS Code | VS Code 1.129.1 | not yet verified | Manual checklist below. |
+
+Copilot CLI failures (run `copilot1`; evidence in the harness output, saved to `tmp-fixtures/e2e-copilot1.json`):
+
+- Its `cp` of the viewer files was not completed ("The permission system is blocking automated file copy"); the harness copied the 11 missing viewer files, as run-e2e.js does for Claude Code. It then printed copy commands, as the skill asks, but with Windows-style paths.
+- Because `write` is not path-scoped, the agent also created two stray files in the fixture root: `data.js` and `copy-viewer-files.bat`. That breaks "read-only toward the scanned repo" (the "repo modified" check failed on both).
+- `validate` errors: `candidate not accounted for: packages/api/package.json` and `packages/web/package.json`.
+- Three evidence quotes were not found at the line given (`review-pr` -> `db-migrator`, `review-pr` -> `brief-search`, and the `format.sh` hook link): wrong line numbers.
+
+These are skill-following problems in Copilot CLI's run, not harness problems. No change was made to SKILL.md in this task. A second run was not spent.
+
+### Manual checklist (not yet verified)
+
+For Cursor and Copilot in VS Code. Do not tick a row until you have run it.
+
+1. `node tools/make-fixture.js C:	mpx` (any empty path).
+2. Install into the fixture, project level:
+   - Cursor: `install/install.sh --tool cursor --project C:/tmp/fx` (PowerShell: `install/install.ps1 -Tool cursor -Project C:	mpx`). Installs to `.cursor/skills/ai-sdlc-viewer/`.
+   - Copilot in VS Code: same with `--tool copilot`. Installs to `.github/skills/ai-sdlc-viewer/`.
+3. Commit the install in the fixture and re-record the manifest, so the check compares with the post-install state: `git -C C:/tmp/fx add -A && git -C C:/tmp/fx commit -m install`, then `node -e "require('./tools/fixture-manifest.js').writeManifest('C:/tmp/fx')"`.
+4. Open `C:/tmp/fx` in the tool. Cursor: open Agent chat, type `/`, pick `ai-sdlc-viewer`. Copilot in VS Code: in chat (Agent mode) type `/ai-sdlc-viewer`. Approve the file writes and `cp` commands it asks for.
+5. `node tools/check-scan.js C:/tmp/fx tests/fixtures/sample-repo.expected.json --not-find .cursor/skills/ai-sdlc-viewer/SKILL.md` (Copilot: `--not-find .github/skills/ai-sdlc-viewer/SKILL.md`). Expect `PASS`.
+
+| Tool | Version tested | Result |
+|---|---|---|
+| Cursor | | not yet verified |
+| Copilot in VS Code | | not yet verified |

@@ -278,12 +278,20 @@ function checkScan(dir, expected) {
 module.exports = { checkScan, quoteFound, quoteNamesItem, norm, VIEWER_FILES, VIEWER_DIR };
 
 if (require.main === module) {
-  const [dir, expectedFile] = process.argv.slice(2);
+  // Optional: --not-find <path> (repeatable) adds to the expectations' mustNotFindPaths,
+  // e.g. the per-tool install location of the skill in a smoke-test run.
+  const argv = process.argv.slice(2);
+  const extraNotFind = [];
+  for (let i = 0; i < argv.length;) {
+    if (argv[i] === '--not-find' && i + 1 < argv.length) { extraNotFind.push(argv[i + 1]); argv.splice(i, 2); } else i++;
+  }
+  const [dir, expectedFile] = argv;
   if (!dir || !expectedFile) {
-    console.error('usage: node tools/check-scan.js <scanned-dir> <expected.json>');
+    console.error('usage: node tools/check-scan.js <scanned-dir> <expected.json> [--not-find <path>]...');
     process.exit(2);
   }
   const expected = JSON.parse(fs.readFileSync(expectedFile, 'utf8'));
+  expected.mustNotFindPaths = (expected.mustNotFindPaths || []).concat(extraNotFind);
   const r = checkScan(path.resolve(dir), expected);
   if (r.pass) {
     console.log('PASS ' + r.checks + ' checks');

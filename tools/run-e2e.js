@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 // Dev tool: end-to-end evaluation of the skill with Claude Code.
-// Usage: node tools/run-e2e.js [label] [--reuse]
+// Usage: node tools/run-e2e.js [label] [--reuse] [--tool claude|copilot-cli|codex]
+//   --tool: claude (default, the plugin path below) or copilot-cli / codex, which install the skill
+//   into the fixture with install/install.sh --project (never user-level), commit the install and
+//   re-record the hash manifest, then run that tool headless with scoped permissions (see runOther).
 //   --reuse: skip steps 1-3 and redo steps 4-5 on tmp-fixtures/e2e and the transcript
 //            summary tmp-fixtures/e2e-<label>.json left by an earlier run with that label.
 //
@@ -20,8 +23,9 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { spawnSync } = require('node:child_process');
+const { spawnSync, execFileSync } = require('node:child_process');
 const { makeFixture } = require('./make-fixture.js');
+const { writeManifest } = require('./fixture-manifest.js');
 
 const ROOT = path.join(__dirname, '..');
 const FIXTURE = path.join(ROOT, 'tmp-fixtures', 'e2e');
@@ -71,6 +75,44 @@ function runClaude(label) {
   return result;
 }
 
+// Project-level skill dir per tool (matches install/install.sh and docs/tool-support.md).
+const PROJECT_DIR = { 'copilot-cli': '.github/skills', codex: '.agents/skills' };
+
+const COPILOT_ALLOW = ['shell(git ls-files)', 'shell(git rev-parse)', 'shell(git config)', 'shell(pwd)', 'shell(date)',
+  'shell(ls)', 'shell(mkdir)', 'shell(cp)', 'shell(rm -rf ai-sdlc-viewer)', 'write'];
+
+// Non-Claude tools: project-level install into the fixture, commit it, re-record the manifest
+// (so "repo modified" compares with the post-install state), then run the tool headless.
+function runOther(tool, label) {
+  if (!PROJECT_DIR[tool]) throw new Error('unsupported --tool ' + tool);
+  makeFixture(FIXTURE);
+  const inst = spawnSync('bash', [path.join(ROOT, 'install', 'install.sh'), '--tool', tool, '--project', FIXTURE], { encoding: 'utf8' });
+  process.stdout.write(inst.stdout + inst.stderr);
+  if (inst.status !== 0) process.exit(1);
+  const g = (a) => execFileSync('git', ['-C', FIXTURE, '-c', 'core.autocrlf=false', '-c', 'user.name=fixture', '-c', 'user.email=fixture@example.com', ...a], { stdio: 'inherit' });
+  g(['add', '-A']); g(['commit', '-q', '-m', 'install skill (project level)']);
+  writeManifest(FIXTURE);
+  let cmd, args;
+  if (tool === 'copilot-cli') {
+    cmd = 'copilot';
+    args = ['-p', '/ai-sdlc-viewer', '--no-ask-user', '-s'];
+    COPILOT_ALLOW.forEach((t) => args.push('--allow-tool=' + t));
+  } else {
+    cmd = 'codex';
+    args = ['exec', '--sandbox', 'workspace-write', '-C', '"' + FIXTURE + '"', '--color', 'never', '$ai-sdlc-viewer'];
+  }
+  console.log('$ (cd tmp-fixtures/e2e && ' + cmd + ' ' + args.map((a) => (/[\s"*($]/.test(a) ? JSON.stringify(a) : a)).join(' ') + ')');
+  const t0 = Date.now();
+  const r = spawnSync(cmd, args, { cwd: FIXTURE, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+    // codex is an npm .cmd shim on Windows, which needs a shell; its args contain no cmd metacharacters.
+    shell: process.platform === 'win32' && cmd === 'codex' });
+  console.log(cmd + ' exit ' + r.status + ' after ' + Math.round((Date.now() - t0) / 1000) + 's');
+  fs.writeFileSync(logPath(label), JSON.stringify({ stdout: r.stdout, stderr: r.stderr, status: r.status }, null, 2));
+  console.log('--- agent output (tail) ---\n' + String(r.stdout || '').slice(-2500) +
+    '\n--- stderr (tail) ---\n' + String(r.stderr || '').slice(-800));
+  return { tool, installed: PROJECT_DIR[tool] + '/ai-sdlc-viewer', agentText: String(r.stdout || '') };
+}
+
 function logPath(label) { return path.join(ROOT, 'tmp-fixtures', 'e2e-' + label + '.json'); }
 
 // Did Claude Code refuse a command of the agent's that copies files (cp / Copy-Item,
@@ -83,9 +125,16 @@ function copyWasDenied(result) {
 function main() {
   const argv = process.argv.slice(2);
   const reuse = argv.includes('--reuse');
-  const label = argv.filter((a) => a !== '--reuse')[0] || 'run';
+  const ti = argv.indexOf('--tool');
+  const tool = ti >= 0 ? argv[ti + 1] : 'claude';
+  const rest = argv.filter((a, i) => !a.startsWith('--') && i !== ti + 1);
+  const label = rest[0] || 'run';
   let result;
-  if (reuse) {
+  let other = null;
+  if (tool !== 'claude') {
+    other = runOther(tool, label);
+    result = {};
+  } else if (reuse) {
     result = JSON.parse(fs.readFileSync(logPath(label), 'utf8'));
     console.log('reusing the agent output of run "' + label + '" (no new claude run)');
   } else {
@@ -98,18 +147,19 @@ function main() {
 
   const out = path.join(FIXTURE, 'ai-sdlc-viewer');
   const missing = VIEWER_FILES.filter((f) => !fs.existsSync(path.join(out, f)));
-  if (fs.existsSync(path.join(out, 'data.js')) && missing.length && copyWasDenied(result)) {
+  if (fs.existsSync(path.join(out, 'data.js')) && missing.length && (other ? true : copyWasDenied(result))) {
     // Copy only what is missing; never overwrite a file the agent copied.
     for (const f of missing) {
       fs.mkdirSync(path.dirname(path.join(out, f)), { recursive: true });
       fs.copyFileSync(path.join(VIEWER, f), path.join(out, f));
     }
-    console.log('HARNESS COPY: Claude Code refused the agent\'s viewer copy; the harness copied the ' +
+    console.log('HARNESS COPY: ' + (other ? tool + ' did not complete' : 'Claude Code refused') + ' the agent\'s viewer copy; the harness copied the ' +
       missing.length + ' missing viewer file(s): ' + missing.join(', ') + '. data.js is the agent\'s.');
   }
 
+  const notFind = other ? ['--not-find', other.installed + '/SKILL.md', '--not-find', other.installed + '/.ai-sdlc-viewer-plugin'] : [];
   const c = spawnSync(process.execPath, [path.join(__dirname, 'check-scan.js'), FIXTURE,
-    path.join(ROOT, 'tests', 'fixtures', 'sample-repo.expected.json')], { encoding: 'utf8' });
+    path.join(ROOT, 'tests', 'fixtures', 'sample-repo.expected.json')].concat(notFind), { encoding: 'utf8' });
   process.stdout.write(c.stdout);
   process.exit(c.status);
 }

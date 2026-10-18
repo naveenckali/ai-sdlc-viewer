@@ -9,7 +9,10 @@
     { name: 'aws-access-key', re: /AKIA[A-Z0-9]{16}/g },
     { name: 'slack-token', re: /xox[bpoa]-[A-Za-z0-9-]+/g },
     { name: 'private-key', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g },
-    { name: 'key-value', re: /(?:password|passwd|secret|token|api[_-]?key)["']?\s*[:=]\s*["']?(?!\[redacted\])[^\s"'<>,;]{6,}/gi },
+    // The value is skipped when it is already [redacted], or when the whole value is a
+    // variable/placeholder reference: $NAME, ${NAME}, ${{ ... }}, %NAME% (a <placeholder>
+    // never matches because the value may not contain < or >).
+    { name: 'key-value', re: /(?:password|passwd|secret|token|api[_-]?key)["']?\s*[:=]\s*["']?(?!\[redacted\])(?!\$\{\{)(?!(?:\$[A-Za-z_][A-Za-z0-9_]*|\$\{[A-Za-z_][A-Za-z0-9_.]*\}|%[A-Za-z_][A-Za-z0-9_]*%)(?:[\s"'<>,;]|$))[^\s"'<>,;]{6,}/gi },
     { name: 'url-credentials', re: /[a-z][a-z0-9+.-]*:\/\/[^\s:\/@]+:(?!\[redacted\])[^\s\/@]+@/gi }
   ];
 

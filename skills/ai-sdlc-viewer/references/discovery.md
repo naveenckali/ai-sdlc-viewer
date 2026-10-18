@@ -35,11 +35,11 @@ Check every one of these, at the repo root **and inside every nested package** (
 
 ### Claude
 
-- `.claude/skills/*/SKILL.md`, and every other file in each skill folder (references, scripts, templates)
+- `.claude/skills/*/SKILL.md`, and every other file in each skill folder (references, scripts, templates). Scripts among them become their own items and other support files fold into the skill (classification.md §3). The same applies to agent folders and to the skill folders listed under Cursor, Copilot, and Codex below.
 - `.claude/agents/*.md` (agents / subagents)
 - `.claude/commands/**/*.md` (slash commands; subfolders are namespaces)
 - `.claude/settings.json`, `.claude/settings.local.json` and any other `.claude/settings*.json`: the `hooks` entries (AI-tool hooks), plus `mcpServers` if present
-- `.claude/hooks/` and any script a hook entry runs
+- `.claude/hooks/` and any script a hook entry runs (each such script is its own item, linked from the hook)
 - `.mcp.json` (MCP servers)
 - `CLAUDE.md` at any depth, and `CLAUDE.local.md`
 - `.claude-plugin/` (`plugin.json`, `marketplace.json`) and whatever a plugin manifest points at (its skills, agents, commands, hooks, MCP config)
@@ -112,7 +112,7 @@ Then search beyond the known locations. Add every file that matches any of these
 - **Any file whose text names skills, agents, prompts, or subagents** as AI tooling: search text files (markdown, YAML, JSON, TOML, shell, and other script files) for words like `skill`, `subagent`, `agent`, `prompt`, `slash command`, `MCP`, `claude`, `copilot`, `cursor`, `codex`, `LLM`. In application source code, include a file only if it is clearly tooling (for example a script that invokes an AI CLI or model), not a file that merely uses the word (`userAgent`).
 - **Folders holding spec/plan/tasks-shaped files**: any folder with files named like `spec*.md`, `plan*.md`, `tasks*.md`, `requirements*.md`, `design*.md`, `prd*.md`, or containing checkbox task lists (`- [ ]`) with numbered steps. Include every file in such a folder. Also include `docs/adr/`, `docs/rfcs/`, and similar design-doc folders, so classification can record them (usually as unclassified design docs).
 - **Hook, workflow, and MCP configs anywhere**: any file named like `*hooks*.json`, `*workflow*.y*ml`, `*mcp*`.
-- **Anything any other candidate references**: if a skill, command, hook, or workflow names a file or script (for example `run scripts/release.sh`, `see docs/process/tasks-template.md`), that file is a candidate too, unless excluded.
+- **Anything any other candidate references**: if a skill, command, hook, or workflow names a file or script (for example `run scripts/release.sh`, `see docs/process/tasks-template.md`), that file is a candidate too, unless excluded. A referenced script is always its own item, linked from what runs it. Only non-runnable support files in a skill's or agent's own folder fold into that item (classification.md §3).
 
 Keep sweeping until a pass adds nothing new.
 

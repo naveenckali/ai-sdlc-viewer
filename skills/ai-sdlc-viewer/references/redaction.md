@@ -20,10 +20,20 @@ The viewer's validator (`viewer/lib/secrets.js`) checks every string in `items`,
 3. **AWS access key id**: `AKIA` followed by 16 uppercase letters or digits.
 4. **Slack token**: `xoxb-`, `xoxp-`, `xoxo-`, or `xoxa-` followed by letters, digits, or hyphens.
 5. **Private key header**: a line like `-----BEGIN RSA PRIVATE KEY-----` or `-----BEGIN PRIVATE KEY-----` (any uppercase words before `PRIVATE KEY`).
-6. **Key = value secrets**: the words `password`, `passwd`, `secret`, `token`, or `api_key` / `api-key` / `apikey`, in any letter case and also at the end of a longer name (`GITHUB_TOKEN`, `client_secret`, `DB_PASSWORD`), optionally followed by a closing quote, then `:` or `=`, optional spaces, an optional opening quote, and a value of 6 or more characters that contains no whitespace, quotes, `<`, `>`, `,` or `;`. Replace the value: `DB_PASSWORD=[redacted]`. A value that is already `[redacted]` is fine.
+6. **Key = value secrets**: the words `password`, `passwd`, `secret`, `token`, or `api_key` / `api-key` / `apikey`, in any letter case and also at the end of a longer name (`GITHUB_TOKEN`, `client_secret`, `DB_PASSWORD`), optionally followed by a closing quote, then `:` or `=`, optional spaces, an optional opening quote, and a value of 6 or more characters that contains no whitespace, quotes, `<`, `>`, `,` or `;`. Replace the value: `DB_PASSWORD=[redacted]`. The validator does **not** flag these values, which are not secrets:
+   - a value that is already `[redacted]`;
+   - a value that starts with `${{` (a CI expression such as `${{ secrets.OPENAI_KEY }}`);
+   - a value that is, in full, one variable reference: `$NAME`, `${NAME}` (the name may contain dots, as in `${env.TOKEN}`), or `%NAME%`, where NAME is letters, digits and `_` and does not start with a digit. "In full" means the reference is followed by whitespace, a quote, `<`, `>`, `,`, `;`, or the end of the text;
+   - a `<placeholder>` such as `<your-password>` (the value can't contain `<`).
+
+   Keep such references verbatim (`token=$GITHUB_TOKEN`, `api_key: ${{ secrets.OPENAI_KEY }}`, `password: ${DB_PASS}`, `token=%TOKEN%`). The exception is the always-redact rule in §1: MCP `env` values and `Authorization` headers are redacted even when they are references. A value that only starts like a reference or has one in the middle (`$ecret$123`, `abc${X}def`, `hunter2${X}`, `${DB_PASS:-fallback}`) is still a secret: redact it.
 7. **Credentials in a URL**: `scheme://user:password@...` (any scheme: `https`, `postgres`, `mongodb+srv`, `redis`, ...). Replace the password part: `postgres://app:[redacted]@db.internal:5432/app`.
 
-Pattern 6 also matches harmless text like `token=$GITHUB_TOKEN` or `password: changeme-in-prod`. The validator can't tell the difference, so redact these too (`token=[redacted]`), or describe the line in your own words in summaries instead of quoting it.
+Pattern 6 still matches some harmless literal text, such as `password: changeme-in-prod`. The validator can't tell the difference, so redact it (`password: [redacted]`). In an evidence quote or an `ownDescription`, always redact in place and keep the rest verbatim: never paraphrase those two to avoid a secret. Only in your own text (summary, `whatItDoes`, inputs, outputs, trigger details, reasons) may you describe the line in your own words instead.
+
+## Order
+
+Redaction is the last change to any text you copy from a file. If a later step (such as the self-check) re-copies text from a file, redact the re-copied text again before keeping it. When you compare a written quote or `ownDescription` with its file, treat each `[redacted]` as matching the secret value at that spot; the rest must match exactly.
 
 ## 3. Check
 

@@ -8,7 +8,7 @@ A link says one item is connected to another. Inventing a link is one of the thr
 |---|---|---|---|
 | `calls` | One item invokes or uses another as part of its work | caller → called | `review-pr/SKILL.md` line 42 says `then invoke the db-migrator agent` → link `review-pr` → `db-migrator` |
 | `handoff` | One item's output becomes the next item's input | producer → consumer | a spec says `Next step: run /plan-feature with this spec` → link `checkout-spec` → `plan-feature` |
-| `triggers` | One item starts another without calling it as a step (an event, a hook, a workflow run) | starter → started | `deploy.yml` has `workflow_run: workflows: ["CI"]` → link `workflow-ci` → `workflow-deploy`; a Claude hook entry whose `command` runs `scripts/format.sh` → link `hook-post-tool-use-format` → `format-script` |
+| `triggers` | One item starts another without calling it as a step (an event, a hook, a workflow run) | starter → started | `deploy.yml` has `workflow_run: workflows: ["CI"]` → link `workflow-ci` → `workflow-deploy`; a Claude hook entry whose `command` runs `scripts/format.sh` → link `hook-post-tool-use-format` → `format` (the script is always its own item; see classification.md §3) |
 
 More `calls` examples: a workflow step `run: npm run release` (workflow → `release` script); a `.husky/pre-commit` line `npm test` (git hook → `test` script); `uses: ./.github/workflows/build.yml` (caller workflow → reusable workflow); a command that says `Use the reviewer subagent`.
 
@@ -20,7 +20,8 @@ Pick the type the quote supports. If the quote says "run X", it is `calls`. If i
 - A non-inferred link has `inferred: false` and `evidence: {path, line, quote}`:
   - `path`: the repo-relative POSIX path of the file the quote is in (usually a file of the `from` item).
   - `line`: **the evidence `line` is 1-based** (the first line of the file is line 1). It is the line where the quote starts.
-  - `quote`: text copied exactly from that line, short (one line, the words that create the link). Don't paraphrase or join lines. Redact secrets in it (see redaction.md).
+  - `quote`: text copied exactly from that line, short (one line, the words that create the link). Don't paraphrase or join lines. The one allowed change is redaction: secret values are replaced with `[redacted]` (see redaction.md). Never paraphrase a quote to avoid a secret.
+- **Scripts are always their own items.** Any script, `scripts/`/`bin/`/`tools/` file, Makefile target, `package.json` script, or file a hook or workflow runs is a separate item, and the thing that runs it gets a link to it. Only non-runnable support files in a skill's or agent's own folder fold into that item (classification.md §3).
 - Both `from` and `to` must be ids of items you are writing. If the other end isn't an item (for example a third-party action, an external service), don't write a link; mention it in `whatItDoes` instead.
 - One link per pair and type. If several lines support it, quote the clearest one.
 
@@ -56,6 +57,6 @@ Triggers say what starts an item. They go in the item's `triggers` array, not in
 
 Before writing `data.js`:
 
-1. For every non-inferred link and every trigger with evidence, re-open `evidence.path` and find `evidence.quote` at `evidence.line`, allowing ±2 lines.
-2. If the quote is there but at another line, fix the line. If the text differs, copy the exact text. If you can't find it, drop the link, or keep it as `inferred: true` with an honest `reason`.
+1. For every non-inferred link and every trigger with evidence, re-open `evidence.path` and find `evidence.quote` at `evidence.line`, allowing ±2 lines. Compare **exactly, apart from `[redacted]` spans**: each `[redacted]` in the quote stands for the secret value at that spot in the file, and everything else must match character for character.
+2. If the quote is there but at another line, fix the line. If the text differs outside the `[redacted]` spans, copy the exact text from the file again, **then redact it again** (redaction.md) before keeping it. If you can't find it, drop the link, or keep it as `inferred: true` with an honest `reason`.
 3. Confirm `from` and `to` are both item ids, and the quote really names or invokes the `to` item (for `calls`/`triggers`) or passes output to it (for `handoff`).

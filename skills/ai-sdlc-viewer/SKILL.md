@@ -41,6 +41,7 @@ Follow `references/classification.md` for each candidate. Open and read the whol
 - The path string must match the candidate string exactly.
 - One file can define several items (each `package.json` script, Makefile target, MCP server, or hook entry is its own item). Each such item lists that file in its `paths`.
 - One item can span several files (a Spec Kit feature folder, a skill with its own reference files). List the main file first.
+- Scripts are always their own items: any script file (even inside a skill folder), any file under `scripts/`, `bin/`, `tools/`, each Makefile target and `package.json` script, each git hook, and any file a hook or workflow runs. Whatever runs them gets a link. Only non-runnable support files (templates, references, examples, assets) in a skill's or agent's own folder fold into that item's `paths`.
 - Human design docs, ADRs, and RFCs that no AI tooling works from go in `unclassified` with the reason `design doc, not used by AI tooling`.
 - Set `level` (`full` or `light`), `kind`, `ecosystem`, `package`, `localOnly`, and a unique kebab-case `id` as classification.md says.
 
@@ -48,7 +49,7 @@ Follow `references/classification.md` for each candidate. Open and read the whol
 
 For each item, from its own files only:
 
-- **Copy `ownDescription` verbatim.** It is the description the file declares for itself: a `description:` frontmatter or config field, or, when there is no such field, an opening sentence the file clearly presents as describing itself (for example the first line under a script's header comment). Do not fix typos, shorten, merge lines, or reword it. If the file has none, use null; never write your own text here. The viewer shows it as a quote.
+- **Copy `ownDescription` verbatim.** It is the description the file declares for itself: a `description:` frontmatter or config field, or, when there is no such field, an opening sentence the file clearly presents as describing itself (for example the first line under a script's header comment). Do not fix typos, shorten, merge lines, or reword it; the only allowed change is redaction (step 8). If the file has none, use null; never write your own text here. The viewer shows it as a quote.
 - **Write `summary`, `whatItDoes`, `inputs`, `outputs`, `triggers`, `invocation`, and `sdlcRole` only from file content; use null or empty where the file is silent.**
   - `summary`: one or two sentences in your own words, restating what the file says the item does. No guessing at intent.
   - `whatItDoes`: short bullets, each traceable to the file.
@@ -82,19 +83,22 @@ Follow `references/redaction.md` across every string you are about to write: sum
 - Replace only the secret value with `[redacted]`, keeping the key name (`API_KEY=[redacted]`).
 - Always redact MCP `env` values and `Authorization` headers, whatever they look like.
 - A redacted evidence quote is still valid evidence; keep its path and line.
+- Never paraphrase an evidence quote or `ownDescription` to avoid a secret: redact in place. Only your own text (summary, bullets, inputs, outputs, details) may be reworded instead.
+- Variable references such as `$TOKEN`, `${{ secrets.X }}`, `${DB_PASS}`, and `%API_KEY%` are not secrets; keep them verbatim, except in MCP `env` values and `Authorization` headers, which are always redacted.
+- Redaction is the last change to copied text. If step 9 makes you re-copy any text from a file, redact it again.
 
 ## 9. Self-check before writing
 
 Do every check. Fix what fails, then check again.
 
-- **Re-open each evidence path and confirm the quote appears at that line (±2 lines).** This covers link evidence and trigger evidence. Fix the line or quote, or drop the link, or mark the link inferred with a reason.
+- **Re-open each evidence path and confirm the quote appears at that line (±2 lines).** This covers link evidence and trigger evidence. Compare exactly, apart from `[redacted]` spans (each one stands for the secret at that spot). Fix the line or quote (re-copy, then redact again), or drop the link, or mark the link inferred with a reason.
 - **Confirm every candidate is accounted for**: each `meta.candidates` entry appears exactly in some item's `paths` or as an `unclassified[].path`, and every item path and unclassified path is in `meta.candidates`.
 - **Confirm ids are unique and every link endpoint exists** in `items`.
 - **Confirm no path contains `\` or starts with `/` or a drive letter** (`C:`). This applies to item paths, evidence paths, unclassified paths, and candidates. Only `meta.source` may be absolute.
 - Confirm every `kind`, `ecosystem`, `level`, trigger `type`, link `type`, and invocation `role` is one of the values in `references/data-format.md`.
 - Confirm every `phase` is null or an id in `phases.list` (always null with the placeholder).
 - Confirm each spec has non-empty `inputs` and `outputs`.
-- Re-read each `ownDescription` against its file: verbatim, not paraphrased. Re-read each summary against its file: nothing the file doesn't say.
+- Re-read each `ownDescription` against its file: verbatim apart from `[redacted]` spans, not paraphrased. If you re-copy it, redact it again. Re-read each summary against its file: nothing the file doesn't say.
 - Search your planned output for anything secret-shaped that `references/redaction.md` lists.
 - Optional: if you can run JavaScript, load `SKILL_DIR/viewer/lib/validate.js` and run `validate(data)` on your object. It must report no fatal error and no errors. This is a convenience, not a requirement.
 

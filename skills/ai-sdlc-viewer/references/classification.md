@@ -37,10 +37,13 @@ Pick by where the file lives and which tool reads it, not by what it mentions.
 
 ## 3. How files map to items
 
-- **One item per thing a user or tool can run or load.** A skill folder is one item: `SKILL.md` first in `paths`, then every other file in that folder. A spec feature folder is one item: its main file first (`spec.md` or `requirements.md`), then the others.
+- **One item per thing a user or tool can run or load.** A skill folder is one item: `SKILL.md` first in `paths`, then the folder's support files (see the next rule). A spec feature folder is one item: its main file first (`spec.md` or `requirements.md`), then the others.
+- **Own item or support file (one rule, used everywhere):**
+  - **Always its own item, plus a link from whatever runs it (when a file says so):** every script file (a file with a shebang line, or a `.sh` `.bash` `.zsh` `.ps1` `.psm1` `.cmd` `.bat` `.py` `.js` `.mjs` `.cjs` `.ts` `.rb` `.pl` extension), wherever it lives, including inside a skill's or agent's folder; every runnable file under `scripts/`, `bin/`, or `tools/` (a non-runnable file there, such as a README, goes in `unclassified` with a reason); every Makefile target and `package.json` script; every git hook file; and any file that a hook entry, workflow, or other item runs as a command.
+  - **Folded into the owning item's `paths`, never its own item:** only non-runnable support files inside a skill's or agent's own folder: templates, reference docs, examples, schemas, and assets.
+  - Example: `.claude/skills/release/SKILL.md` + `.claude/skills/release/templates/notes.md` + `.claude/skills/release/scripts/bump.sh` give two items. Item `release` has paths `[SKILL.md, templates/notes.md]`; item `bump` has paths `[scripts/bump.sh]`, with a `calls` link `release` → `bump` when `SKILL.md` names the script. A Claude hook entry whose command runs `scripts/format.sh` is a `hook` item, and the script is a `script` item, with a `triggers` link from the hook to the script.
 - **One file, many items:** each `package.json` script, Makefile target, MCP server entry, and AI-tool hook entry is its own item. Each lists the shared file (for example `package.json`) in `paths`. Give each an evidence-able name (`npm run lint` → name `lint`).
 - A config file that defines no item at all after reading (for example a `.claude/settings.json` with permissions only) goes in `unclassified` with a reason such as `settings without hooks or MCP servers`.
-- A file referenced by an item that only supports it (a template, a helper script run only by that skill) goes in that item's `paths`, unless it is itself runnable by users, in which case it is its own item with a link.
 - A Superpowers spec and plan are separate files and separate items. Spec Kit and Kiro feature folders are one item each.
 - A git submodule is a `submodule` item with `paths: ["<submodule path>"]`, `level: "full"`, summary from `.gitmodules` only (for example its URL, redacted if it has credentials).
 
@@ -91,7 +94,7 @@ In practice:
 - `package` = the nearest ancestor dir containing its own `package.json`/`pyproject.toml`/`go.mod`/`.claude`/`.github` below the root. Write it repo-relative (for example `packages/web`).
 - Items under the repo root package get `package: null`.
 - Ignore candidate ancestors that are inside a tooling folder: a skill folder with its own `package.json` still belongs to the package that holds its `.claude/`.
-- Prefix the id with the package slug: the package path with `/` replaced by `-`, lowercased (`packages/web` → `packages-web-`). So `lint-fix` in `packages/web` gets id `packages-web-lint-fix`, while `name` stays `lint-fix`.
+- Prefix the id with the package slug: the package path lowercased, with every character other than a lowercase letter or digit replaced by `-`, repeated `-` collapsed to one, and leading/trailing `-` removed (`packages/web` → `packages-web`, `apps/Web_UI` → `apps-web-ui`, `.github-actions/x` → `github-actions-x`), then a `-`. So `lint-fix` in `packages/web` gets id `packages-web-lint-fix`, while `name` stays `lint-fix`.
 
 ## 8. Ids
 

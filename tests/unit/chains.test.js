@@ -92,3 +92,22 @@ test('fixture data derives chains without throwing', () => {
     for (const s of c.steps) if (!s.inferred && s.from.indexOf('trigger:') !== 0) assert.ok(s.evidence, s.from + '->' + s.to);
   }
 });
+
+test('two items with the same "other" trigger wording are not joined into one chain', () => {
+  const d = mk(['A', 'B'], []);
+  const ev = { path: 'a.md', line: 1, quote: 'always loaded' };
+  d.items[0].triggers = [{ type: 'other', detail: 'Always loaded', evidence: ev }];
+  d.items[1].triggers = [{ type: 'other', detail: 'Always loaded', evidence: ev }];
+  const r = chains.deriveChains(d, opts);
+  assert.strictEqual(r.complex.length, 0);
+  assert.strictEqual(r.simple.length, 2);
+  assert.ok(r.simple.every(c => c.nodes.length === 2 && c.steps[0].evidence === ev));
+});
+
+test('a shared event trigger still joins its items (one entry node)', () => {
+  const d = mk(['A', 'B'], []);
+  d.items[0].triggers = [{ type: 'ci-event', detail: 'push to main' }];
+  d.items[1].triggers = [{ type: 'ci-event', detail: 'push to main' }];
+  const r = chains.deriveChains(d, opts);
+  assert.strictEqual(r.complex.length, 1);
+});

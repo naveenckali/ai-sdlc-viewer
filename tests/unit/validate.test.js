@@ -60,3 +60,37 @@ test('never throws on garbage', () => {
   assert.doesNotThrow(() => validate(d));
   assert.ok(validate(d).errors.length > 0);
 });
+
+test('a non-user-command trigger without evidence is a warning, not an error', () => {
+  const d = clone();
+  d.items[0].triggers.push({ type: 'ci-event', detail: 'push to main' });
+  const r = validate(d);
+  assert.deepStrictEqual(r.errors, []);
+  assert.ok(r.warnings.some(w => w.includes('trigger without evidence') && w.includes('plan-feature')), JSON.stringify(r.warnings));
+});
+test('a user-command trigger without evidence is fine', () => {
+  const d = clone();
+  d.items[0].triggers.push({ type: 'user-command', detail: '/x' });
+  assert.deepStrictEqual(validate(d), { fatal: null, errors: [], warnings: [] });
+});
+for (const [name, mutate] of [
+  ['item path', d => { d.items[0].paths = ['../outside/SKILL.md']; }],
+  ['nested item path', d => { d.items[0].paths = ['.claude/../../x.md']; }],
+  ['evidence path', d => { d.links[0].evidence.path = 'a/../../b.md'; }],
+  ['unclassified path', d => { d.unclassified[0].path = '..'; }],
+  ['candidate', d => { d.meta.candidates.push('../x.md'); }]
+]) {
+  test('error: .. segment in ' + name, () => {
+    const d = clone();
+    mutate(d);
+    assert.ok(validate(d).errors.some(e => e.includes('repo-relative POSIX')), JSON.stringify(validate(d).errors));
+  });
+}
+test('a name merely containing two dots is a valid path', () => {
+  const d = clone();
+  d.items[0].paths = ['.claude/skills/plan-feature/SKILL.md'];
+  d.meta.candidates = d.meta.candidates.map(c => c);
+  d.unclassified[0].path = 'docs/adr/0001..notes.md';
+  d.meta.candidates.push('docs/adr/0001..notes.md');
+  assert.ok(!validate(d).errors.some(e => e.includes('repo-relative POSIX')));
+});

@@ -16,7 +16,8 @@
   function isObj(x) { return x !== null && typeof x === 'object' && !Array.isArray(x); }
   function isStr(x) { return typeof x === 'string'; }
   function badPath(p) {
-    return !isStr(p) || p === '' || p.indexOf('\\') !== -1 || p.charAt(0) === '/' || /^[A-Za-z]:/.test(p);
+    return !isStr(p) || p === '' || p.indexOf('\\') !== -1 || p.charAt(0) === '/' || /^[A-Za-z]:/.test(p) ||
+      p.split('/').indexOf('..') !== -1;
   }
 
   function validate(data) {
@@ -106,6 +107,7 @@
       else it.triggers.forEach(function (t) {
         if (!isObj(t) || TRIGGER_TYPES.indexOf(t.type) === -1 || !isStr(t.detail)) { errors.push(tag + ': invalid trigger'); return; }
         if (t.evidence !== undefined) checkEvidence(t.evidence, tag + ' trigger', errors);
+        else if (t.type !== 'user-command') warnings.push(tag + ': trigger without evidence (' + t.type + ': ' + t.detail + ')');
       });
     });
 

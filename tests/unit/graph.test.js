@@ -54,3 +54,32 @@ test('edge ids are unique', () => {
   const g = graph.buildGraphElements(data, { showInferred: true });
   assert.strictEqual(new Set(g.edges.map(e => e.id)).size, g.edges.length);
 });
+
+function twoItems(type, detail) {
+  const d = JSON.parse(JSON.stringify(data));
+  d.links = [];
+  d.items.forEach(i => { i.triggers = []; });
+  const ev = { path: 'x.md', line: 1, quote: 'q' };
+  d.items[0].triggers = [{ type, detail, evidence: ev }];
+  d.items[1].triggers = [{ type, detail, evidence: ev }];
+  return graph.buildGraphElements(d, { showInferred: true });
+}
+
+test('"other" triggers are never shared: same detail on two items gives two nodes', () => {
+  const g = twoItems('other', 'Loaded automatically');
+  const t = g.nodes.filter(n => n.isTrigger);
+  assert.strictEqual(t.length, 2);
+  assert.strictEqual(new Set(g.edges.map(e => e.source)).size, 2);
+  assert.ok(t.every(n => n.label === 'Loaded automatically' && n.kind === 'other'));
+});
+
+test('event triggers with identical detail share one node', () => {
+  const g = twoItems('ci-event', 'push to main');
+  assert.strictEqual(g.nodes.filter(n => n.isTrigger).length, 1);
+  assert.strictEqual(g.edges.length, 2);
+});
+
+test('trigger edges carry the trigger evidence', () => {
+  const g = twoItems('ci-event', 'push to main');
+  assert.ok(g.edges.every(e => e.evidence && e.evidence.quote === 'q'));
+});

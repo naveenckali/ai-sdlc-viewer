@@ -29,7 +29,10 @@
     items.forEach(function (it) {
       (it.triggers || []).forEach(function (t) {
         if (!t || t.type === 'user-command') return;
-        var tid = 'trigger:' + t.type + ':' + t.detail;
+        // Event triggers with identical detail share one entry node. An "other" trigger is free
+        // text ("loaded for *.ts files"): the same words on two items don't show a shared cause,
+        // so each item gets its own node and no chain joins unrelated items through it.
+        var tid = 'trigger:' + t.type + ':' + (t.type === 'other' ? it.id + ':' : '') + t.detail;
         if (!seenTrigger[tid]) {
           seenTrigger[tid] = true;
           nodes.push({ id: tid, label: t.detail, kind: t.type, ecosystem: it.ecosystem, isTrigger: true });

@@ -226,7 +226,7 @@ test('graph (real cytoscape, headless): elements, webhook diamond, inferred dash
   assert.strictEqual(els.find(e => e.data.type === 'calls').data.lineStyle, 'solid');
   const cy = window.__cy;
   assert.strictEqual(cy.$id('trigger:webhook:Issue labeled needs-plan').style('shape'), 'diamond');
-  assert.strictEqual(cy.$id('e5').style('line-style'), 'dashed');
+  assert.strictEqual(cy.$id(inf.data.id).style('line-style'), 'dashed');
   const box = root.querySelector('input.show-inferred');
   assert.strictEqual(box.checked, true);
   box.checked = false;

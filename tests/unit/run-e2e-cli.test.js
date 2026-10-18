@@ -56,3 +56,10 @@ test('as a module: pre-approved tools never include a delete; codex -C quoting d
   const shelled = e2e.codexArgs(dir, true);
   assert.strictEqual(shelled[shelled.indexOf('-C') + 1], '"' + dir + '"');
 });
+
+test('the first positional argument is the label, with or without --tool', () => {
+  assert.match(run(['final9']).r.stdout, /with label final9\b/);
+  assert.match(run(['final9', '--tool', 'codex']).r.stdout, /tool codex with label final9\b/);
+  assert.match(run(['--tool', 'codex', 'final9']).r.stdout, /tool codex with label final9\b/);
+  assert.match(run([]).r.stdout, /with label run\b/);
+});

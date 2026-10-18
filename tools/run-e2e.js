@@ -144,7 +144,7 @@ function main() {
   const reuse = argv.includes('--reuse');
   const ti = argv.indexOf('--tool');
   const tool = ti >= 0 ? argv[ti + 1] : 'claude';
-  const rest = argv.filter((a, i) => !a.startsWith('--') && i !== ti + 1);
+  const rest = argv.filter((a, i) => !a.startsWith('--') && (ti < 0 || i !== ti + 1));
   const label = rest[0] || 'run';
   if (process.env.AISV_E2E_DRY_RUN === '1') {
     // Safety net for tests: never build a fixture or spawn a tool.

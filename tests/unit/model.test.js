@@ -26,7 +26,8 @@ test('light items go to a final collapsed group', () => {
   assert.ok(last.items.every(i => i.level === 'light'));
   assert.ok(g.slice(0, -1).every(x => !x.collapsed && x.items.every(i => i.level === 'full')));
   assert.deepStrictEqual(g.slice(0, -1).map(x => x.label),
-    ['Claude — skills', 'Claude — agents', 'Cursor — rules', 'SDD specs']);
+    ['Claude — skills', 'Claude — agents', 'Cursor — rules', 'SDD specs',
+     'Claude — skills · packages/api', 'Claude — skills · packages/web']);
 });
 
 test('same-name items in different packages land in different groups', () => {

@@ -1,0 +1,52 @@
+{
+  "mustFindItems": [
+    { "name": "review-pr", "kind": "skill", "path": ".claude/skills/review-pr/SKILL.md" },
+    { "name": "db-migrator", "kind": "agent", "path": ".claude/agents/db-migrator.md" },
+    { "name": "release-notes", "kind": "skill", "path": ".claude/skills/release-notes/SKILL.md" },
+    { "name": "changelog-lint", "kind": "skill", "path": ".claude/skills/changelog-lint/SKILL.md" },
+    { "name": "PostToolUse hook", "kind": "hook", "path": ".claude/settings.json" },
+    { "name": "Stop hook", "kind": "hook", "path": ".claude/settings.local.json" },
+    { "name": "format.sh", "kind": "script", "path": "scripts/format.sh" },
+    { "name": "github", "kind": "mcp-server", "path": ".mcp.json" },
+    { "name": "react", "kind": "rule", "path": ".cursor/rules/react.mdc" },
+    { "name": "copilot-instructions", "kind": "instructions", "path": ".github/copilot-instructions.md" },
+    { "name": "AGENTS.md", "kind": "instructions", "path": "AGENTS.md" },
+    { "name": "pre-commit", "kind": "hook", "path": ".husky/pre-commit" },
+    { "name": "ai-triage.yml", "kind": "workflow", "path": ".github/workflows/ai-triage.yml" },
+    { "name": "lint", "kind": "script" },
+    { "name": "build", "kind": "script" },
+    { "name": "test", "kind": "script" },
+    { "name": "ai:review", "kind": "script" },
+    { "name": "001-login", "kind": "spec", "path": "specs/001-login/spec.md" },
+    { "name": "export", "kind": "spec", "path": ".kiro/specs/export/requirements.md" },
+    { "name": "search", "kind": "spec", "path": "sdd/features/search/brief.md" },
+    { "name": "lint-fix", "kind": "skill", "package": "packages/web", "path": "packages/web/.claude/skills/lint-fix/SKILL.md" },
+    { "name": "lint-fix", "kind": "skill", "package": "packages/api", "path": "packages/api/.claude/skills/lint-fix/SKILL.md" },
+    { "name": "libs/shared", "kind": "submodule", "path": "libs/shared" }
+  ],
+  "mustBeSpecs": [
+    "specs/001-login/spec.md",
+    ".kiro/specs/export/requirements.md",
+    "sdd/features/search/brief.md"
+  ],
+  "mustBeUnclassifiedPaths": ["docs/adr/0001-use-postgres.md"],
+  "mustBeLight": ["lint", "build", "test"],
+  "mustBeLocalOnly": [".claude/settings.local.json"],
+  "mustHaveLinks": [
+    { "fromName": "review-pr", "toName": "db-migrator", "type": "calls" },
+    { "fromName": "ai-triage.yml", "toName": "ai:review", "type": ["triggers", "calls"] },
+    { "fromName": "review-pr", "toName": "search", "toPath": "sdd/features/search/brief.md", "type": "any" },
+    { "fromName": "PostToolUse hook", "fromPath": ".claude/settings.json", "fromKind": "hook", "toName": "format.sh", "toPath": "scripts/format.sh", "type": ["triggers", "calls"] }
+  ],
+  "mustNotHaveLinks": [
+    { "fromName": "release-notes", "toName": "changelog-lint" }
+  ],
+  "mustHaveTriggerTypes": [
+    { "name": "ai-triage.yml", "type": "webhook" }
+  ],
+  "secretsMustNotAppear": ["ghp_FAKEfixtureTOKEN0123456789abcdefABCD"],
+  "mustNotFindPaths": [
+    ".cursor/skills/ai-sdlc-viewer/SKILL.md",
+    ".cursor/skills/ai-sdlc-viewer/.ai-sdlc-viewer-plugin"
+  ]
+}

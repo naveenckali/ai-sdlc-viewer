@@ -1,0 +1,5 @@
+{
+  "name": "ai-sdlc-viewer",
+  "version": "0.1.0",
+  "description": "Scan a repo's AI and SDLC tooling and SDD specs into an offline AI SDLC Skills/Spec Viewer page."
+}

@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": ["Bash(npm run lint)"]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "bash scripts/format.sh" }
+        ]
+      }
+    ]
+  }
+}

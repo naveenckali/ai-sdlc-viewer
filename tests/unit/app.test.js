@@ -1,0 +1,290 @@
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('node:fs');
+const path = require('node:path');
+const { JSDOM } = require('jsdom');
+const { loadDataFile } = require('../helpers/load-data.js');
+
+const VIEWER = path.join(__dirname, '../../skills/ai-sdlc-viewer/viewer');
+const FIXTURE = path.join(__dirname, '../fixtures/data/valid.data.js');
+const LIBS = ['escape', 'secrets', 'validate', 'model', 'graph', 'chains'].map(n => `lib/${n}.js`);
+
+function freshData() { return loadDataFile(FIXTURE); }
+
+function setup(data, opts = {}) {
+  const dom = new JSDOM('<!DOCTYPE html><body><div id="root"></div></body>', { runScripts: 'outside-only' });
+  const { window } = dom;
+  if (opts.cytoscape) window.cytoscape = opts.cytoscape;
+  for (const f of LIBS.concat(['app.js'])) window.eval(fs.readFileSync(path.join(VIEWER, f), 'utf8'));
+  const root = window.document.getElementById('root');
+  window.AISV.app.render(root, data);
+  return { window, root, doc: window.document };
+}
+
+function tab(root, label) {
+  const t = [...root.querySelectorAll('.tab')].find(b => b.textContent.startsWith(label));
+  assert.ok(t, 'tab ' + label);
+  t.click();
+}
+
+function headings(root) {
+  return [...root.querySelectorAll('.detail .card h3')].map(h => h.textContent);
+}
+
+test('valid data: header, tabs, first item detail, local only badge, invocation roles', () => {
+  const { root } = setup(freshData());
+  const hdr = root.querySelector('header').textContent;
+  assert.ok(hdr.includes('AI SDLC Skills/Spec Viewer'));
+  assert.ok(hdr.includes('9 items · generated'));
+  assert.ok(hdr.includes('source: /home/dev/acme-shop'));
+  assert.ok(root.querySelector('.chip').textContent.includes('Claude'));
+  const tabs = [...root.querySelectorAll('.tab')].map(t => t.textContent);
+  assert.deepStrictEqual(tabs, ['All tooling', 'Skills Graph', 'Simple chains', 'Complex chains',
+    'ADLC Phase Map', 'Not classified (1)']);
+  assert.ok(root.querySelector('.detail h2').textContent.includes('1'));
+  assert.ok(root.querySelector('.detail h2').textContent.includes('plan-feature'));
+  assert.ok(root.querySelector('.detail').textContent.includes('(green = required, red = optional)'));
+  assert.ok(root.querySelector('.detail .sig .required'));
+  assert.ok(root.querySelector('.detail .sig .optional'));
+  assert.strictEqual(root.querySelector('.detail .sig .required').textContent, '<feature>');
+  assert.ok(root.querySelector('.detail blockquote').textContent.includes('Turn a feature request'));
+  assert.ok(root.querySelector('.detail').textContent.includes('quoted from the file'));
+  const conn = root.querySelector('.detail .connections').textContent;
+  assert.ok(conn.includes('.claude/skills/plan-feature/SKILL.md:12 "Delegate to the reviewer agent"'));
+  assert.ok(conn.includes('specs/checkout-spec.md:3'));
+  // local-only item sits in the collapsed light group; expanding it shows the row and the badge
+  const light = [...root.querySelectorAll('.grp')].find(g => g.textContent.includes('Other scripts'));
+  assert.ok(light.nextElementSibling.hidden);
+  light.click();
+  const lightNow = [...root.querySelectorAll('.grp')].find(g => g.textContent.includes('Other scripts'));
+  assert.ok(!lightNow.nextElementSibling.hidden);
+  const row = [...root.querySelectorAll('.item')].find(r => r.textContent.includes('local-notes'));
+  assert.ok(row.querySelector('.badge.local'));
+  assert.strictEqual(row.querySelector('.badge.local').textContent, 'local only');
+});
+
+test('clicking a row selects it; empty fields say Not stated in the file', () => {
+  const { root } = setup(freshData());
+  const row = [...root.querySelectorAll('.item')].find(r => r.textContent.includes('reviewer'));
+  row.click();
+  assert.ok(root.querySelector('.detail h2').textContent.includes('reviewer'));
+  assert.ok(root.querySelector('.item.on').textContent.includes('reviewer'));
+  assert.ok(root.querySelector('.detail .sig').textContent.includes('Not stated in the file'));
+  const conn = root.querySelector('.detail .connections').textContent;
+  assert.ok(conn.includes('inferred'));
+  assert.ok(conn.includes('Reviewer description mentions running lint'));
+});
+
+test('spec item: Purpose/goal, Inputs, Outputs, then What it does', () => {
+  const { root } = setup(freshData());
+  [...root.querySelectorAll('.item')].find(r => r.textContent.includes('checkout-spec')).click();
+  const h = headings(root);
+  const order = ['Purpose/goal', 'Inputs', 'Outputs', 'What it does'].map(x => h.indexOf(x));
+  assert.ok(order.every(i => i >= 0), JSON.stringify(h));
+  assert.deepStrictEqual(order, order.slice().sort((a, b) => a - b));
+  assert.ok(!h.includes('Summary'));
+});
+
+test('non-spec item: Summary, What it does, Inputs, Outputs, Triggers', () => {
+  const { root } = setup(freshData());
+  const h = headings(root);
+  const order = ['Summary', 'What it does', 'Inputs', 'Outputs', 'Triggers', 'Connections'].map(x => h.indexOf(x));
+  assert.ok(order.every(i => i >= 0), JSON.stringify(h));
+  assert.deepStrictEqual(order, order.slice().sort((a, b) => a - b));
+});
+
+test('malicious names render as literal text', () => {
+  const data = freshData();
+  const evil = '<img src=x onerror="window.pwned=1">';
+  data.items[0].name = evil;
+  data.items[0].summary = '<script>window.pwned=2</script>';
+  data.unclassified[0].reason = evil;
+  const { window, root } = setup(data);
+  assert.strictEqual(window.pwned, undefined);
+  assert.strictEqual(root.querySelector('img'), null);
+  assert.strictEqual(root.querySelector('script'), null);
+  assert.ok(root.querySelector('.detail h2').textContent.includes(evil));
+  tab(root, 'Not classified');
+  assert.ok(root.textContent.includes(evil));
+  assert.strictEqual(root.querySelector('img'), null);
+});
+
+test('render(root, undefined) shows the no-scan-data message', () => {
+  const { root } = setup(undefined);
+  assert.strictEqual(root.textContent.trim(),
+    'No scan data found. Run /ai-sdlc-viewer in this repo to generate it.');
+});
+
+test('render(root, {}) shows the fatal message', () => {
+  const { root } = setup({});
+  assert.strictEqual(root.textContent.trim(),
+    'Unsupported or missing scan data (schemaVersion must be "1")');
+});
+
+test('empty items shows the no-tooling message in list and graph without throwing', () => {
+  const data = freshData();
+  data.items = []; data.links = []; data.unclassified = []; data.meta.candidates = [];
+  const { root } = setup(data);
+  assert.ok(root.textContent.includes('No AI or SDLC tooling found in this repo.'));
+  tab(root, 'Skills Graph');
+  assert.ok(root.textContent.includes('No AI or SDLC tooling found in this repo.'));
+  tab(root, 'Simple chains');
+  tab(root, 'Complex chains');
+  tab(root, 'ADLC Phase Map');
+  tab(root, 'Not classified');
+});
+
+test('unknown link id appears in the warnings banner', () => {
+  const data = freshData();
+  data.links.push({ from: 'plan-feature', to: 'ghost', type: 'calls', inferred: true, reason: 'x' });
+  const { root } = setup(data);
+  const banner = root.querySelector('.warnings');
+  assert.ok(banner);
+  assert.ok(banner.textContent.includes('unknown item id'));
+  assert.strictEqual(banner.tagName, 'DETAILS');
+  tab(root, 'Complex chains');
+  tab(root, 'Simple chains');
+});
+
+test('valid data shows no warnings banner', () => {
+  const { root } = setup(freshData());
+  assert.strictEqual(root.querySelector('.warnings'), null);
+});
+
+test('empty phases: ADLC tab shows the placeholder text', () => {
+  const data = freshData();
+  data.phases.list = [];
+  data.items.forEach(i => { i.phase = null; });
+  const { root } = setup(data);
+  tab(root, 'ADLC Phase Map');
+  assert.ok(root.textContent.includes(
+    'ADLC process not supplied yet. Add .ai-sdlc-viewer/phases.json to the repo and re-run /ai-sdlc-viewer.'));
+});
+
+test('ADLC tab shows one column per phase plus Unmapped', () => {
+  const { root } = setup(freshData());
+  tab(root, 'ADLC Phase Map');
+  const cols = [...root.querySelectorAll('.phase-col h3')].map(h => h.textContent);
+  assert.deepStrictEqual(cols.map(c => c.replace(/\s*\(\d+\)$/, '')), ['Plan', 'Build', 'Unmapped']);
+  const plan = root.querySelector('.phase-col').textContent;
+  assert.ok(plan.includes('plan-feature') && plan.includes('planning'));
+});
+
+test('not classified tab is a table of path and reason', () => {
+  const { root } = setup(freshData());
+  tab(root, 'Not classified');
+  const cells = [...root.querySelectorAll('table td')].map(td => td.textContent);
+  assert.deepStrictEqual(cells, ['docs/adr/0001-use-postgres.md', 'design doc, not used by AI tooling']);
+});
+
+test('filter migrat narrows the count label', () => {
+  const { window, root } = setup(freshData());
+  const input = root.querySelector('input.filter');
+  input.value = 'migrat';
+  input.dispatchEvent(new window.Event('input'));
+  assert.strictEqual(root.querySelector('.count').textContent, '1 of 9 items');
+  const rows = [...root.querySelectorAll('.item')].filter(r => !r.closest('[hidden]'));
+  assert.strictEqual(rows.length, 1);
+  assert.ok(rows[0].textContent.includes('db-migrator'));
+  assert.strictEqual(root.querySelector('input.filter'), input, 'input kept (focus preserved)');
+});
+
+test('no cytoscape global: graph tab shows the failure message', () => {
+  const { root } = setup(freshData());
+  tab(root, 'Skills Graph');
+  assert.ok(root.textContent.includes('Graph library failed to load.'));
+});
+
+test('graph with a stub cytoscape: breadthfirst, webhook diamond, inferred dashed, toggle, node click', () => {
+  const calls = [];
+  const handlers = {};
+  function stub(opts) {
+    calls.push(opts);
+    return { on(ev, sel, fn) { handlers[ev + ' ' + sel] = fn; }, destroy() {} };
+  }
+  const { window, root } = setup(freshData(), { cytoscape: stub });
+  tab(root, 'Skills Graph');
+  assert.strictEqual(calls.length, 1);
+  const opts = calls[0];
+  assert.strictEqual(opts.layout.name, 'breadthfirst');
+  assert.ok(opts.container && root.contains(opts.container));
+  const els = opts.elements;
+  const hook = els.find(e => e.data.kind === 'webhook');
+  assert.strictEqual(hook.data.shape, 'diamond');
+  assert.strictEqual(hook.data.color, '#f59e0b');
+  assert.ok(hook.data.label.startsWith('⚡'));
+  const inf = els.find(e => e.data.inferred === true);
+  assert.strictEqual(inf.data.lineStyle, 'dashed');
+  assert.strictEqual(inf.data.label, 'inferred');
+  const calls_ = els.find(e => e.data.type === 'calls');
+  assert.strictEqual(calls_.data.lineStyle, 'solid');
+  const box = root.querySelector('input.show-inferred');
+  assert.strictEqual(box.checked, true);
+  box.checked = false;
+  box.dispatchEvent(new window.Event('change'));
+  assert.strictEqual(calls.length, 2);
+  assert.ok(!calls[1].elements.some(e => e.data.inferred === true));
+  // clicking an item node goes to All tooling with it selected
+  const tap = handlers['tap node'];
+  assert.ok(tap);
+  tap({ target: { data: (k) => ({ id: 'reviewer', isTrigger: false })[k] } });
+  assert.ok(root.querySelector('.tab.on').textContent === 'All tooling');
+  assert.ok(root.querySelector('.detail h2').textContent.includes('reviewer'));
+});
+
+test('chains tabs render cards with steps, evidence and inferred toggle', () => {
+  const { window, root } = setup(freshData());
+  tab(root, 'Complex chains');
+  const cards = root.querySelectorAll('.chain');
+  assert.ok(cards.length >= 1);
+  const txt = root.querySelector('.chains').textContent;
+  assert.ok(txt.includes('checkout-spec → plan-feature'));
+  assert.ok(txt.includes('handoff'));
+  assert.ok(txt.includes('specs/checkout-spec.md:3 "Next step: run /plan-feature"'));
+  assert.ok(txt.includes('inferred'));
+  const box = root.querySelector('input.show-inferred');
+  box.checked = false;
+  box.dispatchEvent(new window.Event('change'));
+  assert.ok(!root.querySelector('.chains').textContent.includes('Reviewer description mentions'));
+  tab(root, 'Simple chains');
+  assert.strictEqual(root.querySelector('input.show-inferred').checked, false);
+});
+
+test('index.html: title, app div, script order, no network references in shipped files', () => {
+  const html = fs.readFileSync(path.join(VIEWER, 'index.html'), 'utf8');
+  const doc = new JSDOM(html).window.document;
+  assert.strictEqual(doc.title, 'AI SDLC Skills/Spec Viewer');
+  assert.ok(doc.getElementById('app'));
+  const srcs = [...doc.querySelectorAll('script')].map(s => s.getAttribute('src'));
+  assert.deepStrictEqual(srcs, ['data.js', 'vendor/cytoscape.min.js', 'lib/escape.js', 'lib/secrets.js',
+    'lib/validate.js', 'lib/model.js', 'lib/graph.js', 'lib/chains.js', 'app.js']);
+  assert.ok(doc.querySelector('script[src="data.js"]').getAttribute('onerror').includes('AI_SDLC_DATA_MISSING'));
+  assert.ok(doc.querySelector('link[rel="stylesheet"][href="viewer.css"]'));
+});
+
+function walk(dir) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap(d =>
+    d.isDirectory() ? walk(path.join(dir, d.name)) : [path.join(dir, d.name)]);
+}
+
+test('offline: no shipped viewer file outside vendor/ references the network', () => {
+  const files = walk(VIEWER).filter(f => !f.includes(path.sep + 'vendor' + path.sep));
+  assert.ok(files.length >= 9);
+  for (const f of files) {
+    const s = fs.readFileSync(f, 'utf8');
+    assert.ok(!/https?:\/\/|\/\/cdn/i.test(s), 'network reference in ' + f);
+    assert.ok(!/\b(src|href)\s*=\s*["']?\s*\/\//i.test(s), 'protocol-relative URL in ' + f);
+    assert.ok(!/url\(\s*["']?\s*(https?:)?\/\//i.test(s), 'remote url() in ' + f);
+    assert.ok(!/@import/i.test(s), '@import in ' + f);
+  }
+  const app = fs.readFileSync(path.join(VIEWER, 'app.js'), 'utf8');
+  assert.ok(!/innerHTML|outerHTML|insertAdjacentHTML|document\.write/.test(app), 'app.js must not inject HTML');
+});
+
+test('offline: vendored cytoscape has no fetch/XHR calls and keeps its license', () => {
+  const cy = fs.readFileSync(path.join(VIEWER, 'vendor/cytoscape.min.js'), 'utf8');
+  assert.ok(/^\/\*\*\r?\n \* Copyright \(c\) 2016-2024, The Cytoscape Consortium\./.test(cy));
+  assert.ok(!/\bfetch\(|XMLHttpRequest|importScripts|WebSocket|sendBeacon/.test(cy));
+  const lic = fs.readFileSync(path.join(VIEWER, 'vendor/LICENSE-cytoscape.txt'), 'utf8');
+  assert.ok(lic.includes('Permission is hereby granted, free of charge'));
+});

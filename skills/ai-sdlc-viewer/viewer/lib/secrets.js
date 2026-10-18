@@ -4,8 +4,14 @@
   else { root.AISV = root.AISV || {}; root.AISV.secrets = api; }
 })(typeof self !== 'undefined' ? self : this, function (root) {
   var PATTERNS = [
-    { name: 'github-token', re: /ghp_[A-Za-z0-9]{36}/g },
-    { name: 'sk-key', re: /sk-[A-Za-z0-9]{20,}/g },
+    { name: 'github-token', re: /\bgh[pousr]_[A-Za-z0-9]{36,}/g },
+    { name: 'github-pat', re: /github_pat_\w{20,}/g },
+    { name: 'sk-key', re: /\bsk-[A-Za-z0-9_-]{20,}/g },
+    { name: 'google-api-key', re: /AIza[0-9A-Za-z_-]{35}/g },
+    { name: 'gitlab-token', re: /glpat-[\w-]{20}/g },
+    { name: 'stripe-live-key', re: /[rs]k_live_\w{20,}/g },
+    // A literal bearer token; $VAR, ${...}, %VAR%, <placeholder> and [redacted] never match ($ { % < [ are not in the class).
+    { name: 'bearer-token', re: /Bearer\s+[A-Za-z0-9._~+\/-]{12,}/g },
     { name: 'aws-access-key', re: /AKIA[A-Z0-9]{16}/g },
     { name: 'slack-token', re: /xox[bpoa]-[A-Za-z0-9-]+/g },
     { name: 'private-key', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/g },

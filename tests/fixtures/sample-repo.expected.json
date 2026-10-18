@@ -4,6 +4,8 @@
     { "name": "db-migrator", "kind": "agent", "path": ".claude/agents/db-migrator.md" },
     { "name": "release-notes", "kind": "skill", "path": ".claude/skills/release-notes/SKILL.md" },
     { "name": "changelog-lint", "kind": "skill", "path": ".claude/skills/changelog-lint/SKILL.md" },
+    { "name": "build", "kind": "skill", "path": ".claude/skills/build/SKILL.md" },
+    { "name": "docs-style", "kind": "skill", "path": ".claude/skills/docs-style/SKILL.md" },
     { "name": "PostToolUse hook", "kind": "hook", "path": ".claude/settings.json" },
     { "name": "Stop hook", "kind": "hook", "path": ".claude/settings.local.json" },
     { "name": "format.sh", "kind": "script", "path": "scripts/format.sh" },
@@ -29,7 +31,7 @@
     ".kiro/specs/export/requirements.md",
     "sdd/features/search/brief.md"
   ],
-  "mustBeUnclassifiedPaths": ["docs/adr/0001-use-postgres.md"],
+  "mustBeUnclassifiedPaths": ["docs/adr/0001-use-postgres.md", "packages/web/package.json", "packages/api/package.json"],
   "mustBeLight": ["lint", "build", "test"],
   "mustBeLocalOnly": [".claude/settings.local.json"],
   "mustHaveLinks": [
@@ -42,7 +44,8 @@
     { "fromName": "ai:review", "toName": "review-pr", "type": ["calls", "triggers"] }
   ],
   "mustNotHaveLinks": [
-    { "fromName": "release-notes", "toName": "changelog-lint" }
+    { "fromName": "release-notes", "toName": "changelog-lint" },
+    { "fromName": "build", "fromKind": "skill", "toName": "build", "toKind": "script" }
   ],
   "mustHaveTriggerTypes": [
     { "name": "ai-triage.yml", "type": "webhook" }
@@ -50,6 +53,7 @@
   "secretsMustNotAppear": ["ghp_FAKEfixtureTOKEN0123456789abcdefABCD"],
   "mustNotFindPaths": [
     ".cursor/skills/ai-sdlc-viewer/SKILL.md",
-    ".cursor/skills/ai-sdlc-viewer/.ai-sdlc-viewer-plugin"
+    ".cursor/skills/ai-sdlc-viewer/.ai-sdlc-viewer-plugin",
+    ".cursor/skills/ai-sdlc-viewer/viewer/index.html"
   ]
 }

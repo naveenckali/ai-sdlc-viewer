@@ -46,8 +46,9 @@ const ALLOWED_TOOLS = [
   'Bash(date:*)',                            // meta.generatedAt
   'Bash(ls:*)',                              // confirm the copied viewer files
   'Bash(mkdir ai-sdlc-viewer:*)',            // create ai-sdlc-viewer/, lib/, vendor/
-  'Bash(cp:*)',                              // copy the viewer files (Claude Code may still refuse; see step 4)
-  'Bash(rm -rf ai-sdlc-viewer)'              // replace a previous output folder
+  'Bash(mkdir -p ai-sdlc-viewer:*)',
+  'Bash(cp:*)'                               // copy the viewer files (Claude Code may still refuse; see step 4)
+  // No delete is pre-approved: SKILL.md overwrites the output files in place and never deletes.
 ].join(',');
 
 function copyPlugin() {
@@ -80,10 +81,17 @@ function runClaude(label) {
 const PROJECT_DIR = { 'copilot-cli': '.github/skills', codex: '.agents/skills' };
 
 const COPILOT_ALLOW = ['shell(git ls-files)', 'shell(git rev-parse)', 'shell(git config)', 'shell(pwd)', 'shell(date)',
-  'shell(ls)', 'shell(mkdir)', 'shell(cp)', 'shell(rm -rf ai-sdlc-viewer)', 'write'];
+  'shell(ls)', 'shell(mkdir)', 'shell(cp)', 'write'];
 
 // Non-Claude tools: project-level install into the fixture, commit it, re-record the manifest
 // (so "repo modified" compares with the post-install state), then run the tool headless.
+// codex is an npm .cmd shim on Windows, which needs a shell; only then does the -C path need
+// literal quotes (the shell joins the args). Without a shell, quotes would become part of the path.
+function codexArgs(fixture, useShell) {
+  return ['exec', '--sandbox', 'workspace-write', '-C', useShell ? '"' + fixture + '"' : fixture, '--color', 'never', '$ai-sdlc-viewer'];
+}
+const CODEX_SHELL = process.platform === 'win32';
+
 function runOther(tool, label) {
   if (process.env.AISV_E2E_DRY_RUN === '1') throw new Error('AISV_E2E_DRY_RUN is set');
   if (!PROJECT_DIR[tool]) throw new Error('unsupported --tool ' + tool);
@@ -101,13 +109,13 @@ function runOther(tool, label) {
     COPILOT_ALLOW.forEach((t) => args.push('--allow-tool=' + t));
   } else {
     cmd = 'codex';
-    args = ['exec', '--sandbox', 'workspace-write', '-C', '"' + FIXTURE + '"', '--color', 'never', '$ai-sdlc-viewer'];
+    args = codexArgs(FIXTURE, CODEX_SHELL);
   }
   console.log('$ (cd tmp-fixtures/e2e && ' + cmd + ' ' + args.map((a) => (/[\s"*($]/.test(a) ? JSON.stringify(a) : a)).join(' ') + ')');
   const t0 = Date.now();
   const r = spawnSync(cmd, args, { cwd: FIXTURE, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
-    // codex is an npm .cmd shim on Windows, which needs a shell; its args contain no cmd metacharacters.
-    shell: process.platform === 'win32' && cmd === 'codex' });
+    // see codexArgs: its args contain no cmd metacharacters.
+    shell: CODEX_SHELL && cmd === 'codex' });
   console.log(cmd + ' exit ' + r.status + ' after ' + Math.round((Date.now() - t0) / 1000) + 's');
   fs.writeFileSync(logPath(label), JSON.stringify({ stdout: r.stdout, stderr: r.stderr, status: r.status }, null, 2));
   console.log('--- agent output (tail) ---\n' + String(r.stdout || '').slice(-2500) +
@@ -178,4 +186,6 @@ function main() {
   process.exit(c.status);
 }
 
-main();
+module.exports = { ALLOWED_TOOLS, COPILOT_ALLOW, codexArgs };
+
+if (require.main === module) main();

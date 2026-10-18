@@ -43,3 +43,16 @@ test('dry run with a normal label spawns nothing and creates no fixture', () => 
     assert.ok(untouched);
   }
 });
+
+test('as a module: pre-approved tools never include a delete; codex -C quoting depends on the shell', () => {
+  process.env.AISV_E2E_DRY_RUN = '1';
+  const e2e = require(SCRIPT); // must not run main() when required
+  assert.ok(!/\brm\b/.test(e2e.ALLOWED_TOOLS), e2e.ALLOWED_TOOLS);
+  assert.ok(e2e.ALLOWED_TOOLS.includes('Bash(mkdir -p ai-sdlc-viewer:*)'));
+  assert.ok(!e2e.COPILOT_ALLOW.some((t) => /\brm\b/.test(t)), e2e.COPILOT_ALLOW.join(' '));
+  const dir = 'C:/x y/e2e';
+  const plain = e2e.codexArgs(dir, false);
+  assert.strictEqual(plain[plain.indexOf('-C') + 1], dir);
+  const shelled = e2e.codexArgs(dir, true);
+  assert.strictEqual(shelled[shelled.indexOf('-C') + 1], '"' + dir + '"');
+});

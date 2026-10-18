@@ -8,6 +8,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
+const { writeManifest } = require('./fixture-manifest.js');
 
 const SRC = path.join(__dirname, '..', 'tests', 'fixtures', 'sample-repo');
 const RENAMES = { _gitignore: '.gitignore' };
@@ -44,6 +45,7 @@ function makeFixture(outDir) {
   git(out, ['add', '-A']);
   git(out, ['-c', 'user.name=fixture', '-c', 'user.email=fixture@example.com',
     'commit', '-q', '-m', 'fixture']);
+  writeManifest(out);
   return out;
 }
 

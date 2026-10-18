@@ -26,6 +26,8 @@ test('make-fixture builds a committed git repo with ignored local-only files', (
       assert.ok(!tracked.includes(p), p + ' is not tracked');
     }
     assert.strictEqual(git(out, ['status', '--porcelain']).trim(), '', 'working tree clean');
+    const manifest = JSON.parse(fs.readFileSync(path.join(out, '.git', 'ai-sdlc-viewer-fixture-manifest.json'), 'utf8'));
+    for (const p of EXPECTED.mustBeLocalOnly) assert.ok(manifest[p], 'manifest hashes ignored file ' + p);
     assert.match(git(out, ['log', '-1', '--format=%an <%ae>']), /^fixture <fixture@example\.com>/);
   } finally {
     fs.rmSync(path.dirname(out), { recursive: true, force: true });

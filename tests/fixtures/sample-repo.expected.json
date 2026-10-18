@@ -38,6 +38,9 @@
     { "fromName": "review-pr", "toName": "search", "toPath": "sdd/features/search/brief.md", "type": "any" },
     { "fromName": "PostToolUse hook", "fromPath": ".claude/settings.json", "fromKind": "hook", "toName": "format.sh", "toPath": "scripts/format.sh", "type": ["triggers", "calls"] }
   ],
+  "allowedLinks": [
+    { "fromName": "ai:review", "toName": "review-pr", "type": ["calls", "triggers"] }
+  ],
   "mustNotHaveLinks": [
     { "fromName": "release-notes", "toName": "changelog-lint" }
   ],

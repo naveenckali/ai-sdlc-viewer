@@ -10,6 +10,7 @@ const { execFileSync } = require('node:child_process');
 const { loadDataFile } = require('../tests/helpers/load-data.js');
 const { validate } = require('../skills/ai-sdlc-viewer/viewer/lib/validate.js');
 const { findSecrets } = require('../skills/ai-sdlc-viewer/viewer/lib/secrets.js');
+const { diffManifest } = require('./fixture-manifest.js');
 
 const OUT = 'ai-sdlc-viewer';
 const REDACTED = '[redacted]';
@@ -67,10 +68,28 @@ function describe(sel) {
     (sel.package ? ' in ' + sel.package : '');
 }
 
+// Does the link's quote name its `to` item, by name, id, path, or (for a skill or
+// spec) its folder? Compared on whole "-"-separated tokens of the normalized quote.
+function quoteNamesItem(quote, item, items) {
+  const q = String(quote || '');
+  const nq = '-' + norm(q) + '-';
+  const tokens = new Set([norm(item.name), norm(String(item.id || '').replace(item.package ? norm(item.package) + '-' : '', ''))]);
+  for (const p of item.paths || []) {
+    if (q.includes(p)) return true;
+    const shared = items.some((o) => o !== item && (o.paths || []).includes(p));
+    if (!shared) tokens.add(norm(posixBase(p)));
+    if (posixBase(p) === 'SKILL.md' || item.kind === 'spec') tokens.add(norm(posixDir(p)));
+  }
+  tokens.delete('');
+  for (const t of tokens) if (nq.includes('-' + t + '-')) return true;
+  return false;
+}
+
 function ws(s) { return String(s).replace(/\s+/g, ' ').trim(); }
 function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-// Does `quote` (whitespace-normalized; each [redacted] matches any text) occur
+// Does `quote` (whitespace-normalized; each [redacted] matches one run of
+// non-space characters, optionally after "Bearer "/"Basic "/"Token ") occur
 // in <dir>/<path> within ±2 lines of `line`?
 function quoteFound(dir, ev) {
   if (!ev || typeof ev.path !== 'string' || typeof ev.quote !== 'string') return false;
@@ -80,7 +99,7 @@ function quoteFound(dir, ev) {
   const lines = text.split(/\r?\n/);
   const start = Math.max(0, ev.line - 3);
   const windowText = ws(lines.slice(start, ev.line + 2).join('\n'));
-  const pattern = ws(ev.quote).split(REDACTED).map(escapeRe).join('.+?');
+  const pattern = ws(ev.quote).split(REDACTED).map(escapeRe).join('(?:(?:Bearer|Basic|Token) )?\\S+?');
   // A quote that is only [redacted] spans proves nothing.
   if (!ws(ev.quote.split(REDACTED).join(''))) return false;
   return new RegExp(pattern).test(windowText);
@@ -157,6 +176,23 @@ function checkScan(dir, expected) {
       (r.list.length ? ' (found only: ' + r.list.map((l) => l.type + (l.inferred ? ' inferred' : '')).join(', ') + ')' : ''));
   }
 
+  // Closed link set: with allowedLinks present, every link must match an entry in
+  // mustHaveLinks or allowedLinks (inferred links only an entry with allowInferred).
+  if (expected.allowedLinks) {
+    const entries = (expected.mustHaveLinks || []).concat(expected.allowedLinks);
+    for (const l of links) {
+      const ok = entries.some((exp) => {
+        const types = exp.type === undefined || exp.type === 'any' ? null : [].concat(exp.type);
+        if (types && !types.includes(l.type)) return false;
+        if (l.inferred !== false && !exp.allowInferred) return false;
+        const from = findItems(items, endpoint(exp, 'from'), { anyPackage: true }).map((i) => i.id);
+        const to = findItems(items, endpoint(exp, 'to'), { anyPackage: true }).map((i) => i.id);
+        return from.includes(l.from) && to.includes(l.to);
+      });
+      check(ok, 'unexpected link: ' + l.from + ' -> ' + l.to + ' ' + l.type + (l.inferred ? ' (inferred)' : ''));
+    }
+  }
+
   for (const exp of expected.mustNotHaveLinks || []) {
     const a = endpoint(exp, 'from');
     const b = endpoint(exp, 'to');
@@ -192,6 +228,11 @@ function checkScan(dir, expected) {
     if (l.inferred !== false || !l.evidence) return;
     check(quoteFound(dir, l.evidence), 'evidence quote not found: link ' + l.from + ' -> ' + l.to + ' at ' +
       l.evidence.path + ':' + l.evidence.line + ' "' + l.evidence.quote + '"');
+    const target = items.find((it) => it.id === l.to);
+    if (target) {
+      check(quoteNamesItem(l.evidence.quote, target, items), 'evidence quote does not name the target: link ' +
+        l.from + ' -> ' + l.to + ' "' + l.evidence.quote + '"');
+    }
   });
   items.forEach((it) => (it.triggers || []).forEach((t) => {
     if (!t.evidence) return;
@@ -214,11 +255,16 @@ function checkScan(dir, expected) {
     });
     check(other.length === 0, 'repo modified outside ' + OUT + '/: ' + other.join('; '));
   }
+  // git status can't see gitignored files, so also compare every file's hash
+  // with the manifest make-fixture wrote.
+  const diffs = diffManifest(dir);
+  if (diffs === null) check(false, 'repo modified check: no fixture manifest in .git/ (build the repo with tools/make-fixture.js)');
+  else check(diffs.length === 0, 'repo modified (file hashes) outside ' + OUT + '/: ' + diffs.join('; '));
 
   return { pass: failures.length === 0, failures, checks };
 }
 
-module.exports = { checkScan, quoteFound, norm };
+module.exports = { checkScan, quoteFound, quoteNamesItem, norm };
 
 if (require.main === module) {
   const [dir, expectedFile] = process.argv.slice(2);

@@ -6,6 +6,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 const { checkScan } = require('../../tools/check-scan.js');
+const { writeManifest } = require('../../tools/fixture-manifest.js');
 
 const FAKE_TOKEN = 'ghp_' + 'A'.repeat(36);
 
@@ -63,6 +64,7 @@ const EXPECTED = {
   mustBeUnclassifiedPaths: ['docs/adr/1.md'],
   mustBeLight: ['lint'],
   mustHaveLinks: [{ fromName: 'a', toName: 'b', type: 'calls' }],
+  allowedLinks: [{ fromName: 'w.yml', toName: 'lint', type: 'calls' }],
   mustNotHaveLinks: [{ fromName: 'c', toName: 'd' }],
   mustHaveTriggerTypes: [{ name: 'w.yml', type: 'webhook' }],
   secretsMustNotAppear: [FAKE_TOKEN],
@@ -79,9 +81,12 @@ function makeRepo(data) {
   writeFile(dir, 'docs/adr/1.md', '# ADR\n');
   writeFile(dir, '.github/workflows/w.yml',
     'on:\n  repository_dispatch:\njobs:\n  x:\n    steps:\n      - run: npm run lint --token=' + FAKE_TOKEN + '\n');
+  writeFile(dir, '.gitignore', 'local.json\n');
+  writeFile(dir, 'local.json', '{"hooks":{}}\n');
   git(dir, ['init', '-q']);
   git(dir, ['add', '-A']);
   git(dir, ['-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', 'init']);
+  writeManifest(dir);
   writeFile(dir, 'ai-sdlc-viewer/index.html', '<!doctype html>\n');
   writeFile(dir, 'ai-sdlc-viewer/data.js', 'window.AI_SDLC_DATA = ' + JSON.stringify(data || baseData(), null, 2) + ';\n');
   return dir;
@@ -211,4 +216,32 @@ test('spec and local-only expectations are checked', () => {
   const r = failuresFor(null, expected);
   assertFailure(r, 'spec');
   assertFailure(r, 'local-only');
+});
+
+test('a non-inferred link outside the expected set is reported', () => {
+  const r = failuresFor((d) => {
+    d.links.push({ from: 'd', to: 'b', type: 'calls', inferred: false,
+      evidence: { path: '.claude/skills/a/SKILL.md', line: 4, quote: 'then invoke the b agent' } });
+  });
+  assertFailure(r, 'unexpected link');
+});
+
+test('an inferred link outside the expected set is reported', () => {
+  const r = failuresFor((d) => { d.links.push({ from: 'a', to: 'c', type: 'handoff', inferred: true, reason: 'same folder' }); });
+  assertFailure(r, 'unexpected link');
+});
+
+test('a quote that exists but does not name the target item is reported', () => {
+  const r = failuresFor((d) => { d.links[0].evidence = { path: '.claude/skills/a/SKILL.md', line: 2, quote: 'name: a' }; });
+  assertFailure(r, 'does not name the target');
+});
+
+test('modifying a gitignored file is reported as repo modified', () => {
+  const r = failuresFor(() => (dir) => writeFile(dir, 'local.json', '{"hooks":{"x":1}}\n'));
+  assertFailure(r, 'repo modified');
+});
+
+test('[redacted] stands for one secret token, not a whole phrase', () => {
+  const r = failuresFor((d) => { d.links[0].evidence.quote = 'then [redacted] agent'; });
+  assertFailure(r, 'evidence quote not found');
 });

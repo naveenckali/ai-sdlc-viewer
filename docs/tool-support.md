@@ -45,7 +45,7 @@ node tools/run-e2e.js run7
 3. From `tmp-fixtures/e2e`, it runs:
 
 ```sh
-claude -p /ai-sdlc-viewer:ai-sdlc-viewer --plugin-dir <plugin-copy> --add-dir <plugin-copy>   --permission-mode acceptEdits --setting-sources user --strict-mcp-config --output-format json   --allowedTools "Skill,Read,Glob,Grep,Bash(git ls-files:*),Bash(git rev-parse:*),Bash(git config --get core.hooksPath),Bash(git config core.hooksPath),Bash(pwd),Bash(date:*),Bash(ls:*),Bash(mkdir ai-sdlc-viewer:*),Bash(cp:*),Bash(rm -rf ai-sdlc-viewer)"
+claude -p /ai-sdlc-viewer:ai-sdlc-viewer --plugin-dir <plugin-copy> --add-dir <plugin-copy>   --permission-mode acceptEdits --setting-sources user --strict-mcp-config --output-format json   --allowedTools "Skill,Read,Glob,Grep,Bash(git ls-files:*),Bash(git rev-parse:*),Bash(git config --get core.hooksPath),Bash(git config core.hooksPath),Bash(pwd),Bash(date:*),Bash(ls:*),Bash(mkdir ai-sdlc-viewer:*),Bash(mkdir -p ai-sdlc-viewer:*),Bash(cp:*)"
 ```
 
 4. It runs `node tools/check-scan.js tmp-fixtures/e2e tests/fixtures/sample-repo.expected.json`.
@@ -58,7 +58,7 @@ Why each pre-approved tool is there. Each one is a step SKILL.md asks for:
 - `Read`, `Glob` and `Grep` read the repo and the skill's references.
 - `git ls-files`, `git rev-parse` and `git config core.hooksPath` are used for discovery.
 - `pwd` and `date` fill `meta.source` and `meta.generatedAt`.
-- `mkdir ai-sdlc-viewer…` and `rm -rf ai-sdlc-viewer` create and replace the output folder.
+- `mkdir ai-sdlc-viewer…` / `mkdir -p ai-sdlc-viewer…` create the output folders. No delete is pre-approved: SKILL.md never deletes, it overwrites the 12 output files in place and stops to ask if the folder holds anything else.
 - `cp` and `ls` copy the viewer files and confirm them.
 
 `Write` and `Edit` are deliberately left out. `acceptEdits` already allows writes inside the working directory, such as `ai-sdlc-viewer/data.js`, and writes anywhere else then need approval, which is denied headless.
@@ -99,18 +99,19 @@ Run with `node tools/run-e2e.js <label> --tool copilot-cli|codex`. For each run 
 |---|---|---|---|
 | Claude Code (plugin) | 2.1.302 | PASS 85 checks (run 7) | Harness copied the viewer files after Claude Code refused the `cp`; see above. |
 | Codex | codex-cli 0.159.3 | **PASS 86 checks** | `codex exec --sandbox workspace-write -C <fixture> '$ai-sdlc-viewer'`. 98 s. The agent copied all 11 viewer files itself (no harness copy) and its own validation reported no errors or warnings. |
-| Copilot CLI | GitHub Copilot CLI 1.0.100-1 | **FAIL, 7 of 76 checks** (1 run) | `copilot -p /ai-sdlc-viewer --no-ask-user -s --allow-tool=<each of: shell(git ls-files), shell(git rev-parse), shell(git config), shell(pwd), shell(date), shell(ls), shell(mkdir), shell(cp), shell(rm -rf ai-sdlc-viewer), write>`. The skill loaded and produced a mostly correct `data.js`, but see the failures below. |
+| Copilot CLI | GitHub Copilot CLI 1.0.100-1 | **FAIL, 7 of 76 checks** (1 run) | `copilot -p /ai-sdlc-viewer --no-ask-user -s --allow-tool=<each of: shell(git ls-files), shell(git rev-parse), shell(git config), shell(pwd), shell(date), shell(ls), shell(mkdir), shell(cp), shell(rm -rf ai-sdlc-viewer), write>` (the `rm` entry has since been removed from the harness). The skill loaded and produced a mostly correct `data.js`, but see the failures below. |
 | Cursor (GUI) | installed; `cursor-agent` CLI not installed | not yet verified | Manual checklist below. |
 | Copilot in VS Code | VS Code 1.129.1 | not yet verified | Manual checklist below. |
 
 Copilot CLI failures (run `copilot1`; evidence in the harness output, saved to `tmp-fixtures/e2e-copilot1.json`):
 
-- Its `cp` of the viewer files was not completed ("The permission system is blocking automated file copy"); the harness copied the 11 missing viewer files, as run-e2e.js does for Claude Code. It then printed copy commands, as the skill asks, but with Windows-style paths.
-- Because `write` is not path-scoped, the agent also created two stray files in the fixture root: `data.js` and `copy-viewer-files.bat`. That breaks "read-only toward the scanned repo" (the "repo modified" check failed on both).
+- **It routed around a refusal.** Its `cp` of the viewer files was refused ("The permission system is blocking automated file copy"). Instead of stopping, the agent kept trying other ways: "Let me try a different approach", then PowerShell, then it wrote a batch script, `copy-viewer-files.bat`, into the fixture root and tried to run it. That is exactly what a skill must never do. The harness then copied the 11 missing viewer files, as run-e2e.js does for Claude Code. The copy commands it finally printed used Windows-style paths.
+- **It delegated the scan to a background sub-agent** ("I'll use a background task to build this properly"). That sub-agent never saw SKILL.md and wrote `ownDescription` values that were not in the files (invented quotes).
+- Because `write` is not path-scoped, the agent also created two stray files in the fixture root: a first `data.js` and `copy-viewer-files.bat`. That breaks "read-only toward the scanned repo" (the "repo modified" check failed on both).
 - `validate` errors: `candidate not accounted for: packages/api/package.json` and `packages/web/package.json`.
 - Three evidence quotes were not found at the line given (`review-pr` -> `db-migrator`, `review-pr` -> `brief-search`, and the `format.sh` hook link): wrong line numbers.
 
-These are skill-following problems in Copilot CLI's run, not harness problems. No change was made to SKILL.md in this task. A second run was not spent.
+These are skill-following problems in Copilot CLI's run, not harness problems. SKILL.md has since been tightened (final-review fix wave): only `data.js` and the 11 viewer copies may be written, `data.js` directly at its path; no helper, batch, PowerShell or shell scripts; no sub-agents or background tasks; one copy form, and a refusal ends copying; fallback commands use quoted forward-slash paths; package manifests without scripts go to Not classified; line numbers come only from a tool that prints them. check-scan now also fails an `ownDescription` that is not verbatim in its file.
 
 ### Manual checklist (not yet verified)
 

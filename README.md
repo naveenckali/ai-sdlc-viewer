@@ -33,7 +33,7 @@ PowerShell: `install/install.ps1 -Tool <tool> [-Project <repo>]`. Each tool also
 | Tool | User-level dir | Project-level dir | Invoke |
 |---|---|---|---|
 | Claude Code (smoke test passed) | `~/.claude/skills/ai-sdlc-viewer/` | `.claude/skills/ai-sdlc-viewer/` | `/ai-sdlc-viewer:ai-sdlc-viewer` (plugin) or `/ai-sdlc-viewer` (skills folder) |
-| Copilot CLI (smoke test failed, see docs/tool-support.md) | `~/.copilot/skills/ai-sdlc-viewer/` | `.github/skills/ai-sdlc-viewer/` | `/ai-sdlc-viewer` |
+| Copilot CLI (smoke test failed: after a refused copy it tried other ways, wrote and ran a `.bat`, and delegated to a sub-agent that invented descriptions; see docs/tool-support.md) | `~/.copilot/skills/ai-sdlc-viewer/` | `.github/skills/ai-sdlc-viewer/` | `/ai-sdlc-viewer` |
 | Copilot in VS Code (not yet verified) | `~/.copilot/skills/ai-sdlc-viewer/` | `.github/skills/ai-sdlc-viewer/` | `/ai-sdlc-viewer` in chat |
 | Cursor (not yet verified) | `~/.cursor/skills/ai-sdlc-viewer/` | `.cursor/skills/ai-sdlc-viewer/` | `/` in Agent chat, pick `ai-sdlc-viewer` |
 | Codex (smoke test passed) | `~/.agents/skills/ai-sdlc-viewer/` | `.agents/skills/ai-sdlc-viewer/` | `$ai-sdlc-viewer` or `/skills` |
@@ -48,7 +48,7 @@ Some tools refuse the agent's `cp` of the viewer files (headless Claude Code doe
 
 ## Output folder
 
-The output is `<repo>/ai-sdlc-viewer/` (`index.html`, `data.js`, `viewer.css`, `app.js`, `lib/`, `vendor/`). It is replaced on every run. The scan is read-only toward your repo apart from this folder. You choose whether to commit it (shareable with the team) or add `ai-sdlc-viewer/` to `.gitignore`.
+The output is `<repo>/ai-sdlc-viewer/` (`index.html`, `data.js`, `viewer.css`, `app.js`, `lib/`, `vendor/`). Every run overwrites those files in place; the scan never deletes anything, and stops to ask if the folder holds other files. The scan is read-only toward your repo apart from this folder. You choose whether to commit it (shareable with the team) or add `ai-sdlc-viewer/` to `.gitignore`.
 
 **Review the output folder before committing it.** Secrets are replaced with `[redacted]`, but redaction is best-effort and pattern-based. The folder can include excerpts of local-only files (for example a gitignored `.claude/settings.local.json`), which the viewer marks as local-only.
 

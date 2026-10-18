@@ -354,8 +354,50 @@
       'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'line-style': 'solid', label: 'data(label)',
       'font-size': 9, color: '#8a93a6', 'text-background-color': '#0f1117', 'text-background-opacity': 1,
       'text-background-padding': 2 } },
-    { selector: 'edge[?inferred]', style: { 'line-style': 'dashed' } }
+    { selector: 'edge[?inferred]', style: { 'line-style': 'dashed' } },
+    { selector: 'edge.detour', style: { 'curve-style': 'unbundled-bezier', 'control-point-distances': 60,
+      'control-point-weights': 0.5 } }
   ];
+
+  // Layout that never draws an edge through an unrelated node (that would read as an invented link):
+  // linked nodes get a directed breadthfirst from their in-degree-0 roots, unlinked nodes go in a grid
+  // below, and any edge whose straight line still crosses another node is bent around it.
+  var NODE_R = 20;
+  function segmentHitsCircle(a, b, c, r) {
+    var dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
+    var t = len2 ? Math.max(0, Math.min(1, ((c.x - a.x) * dx + (c.y - a.y) * dy) / len2)) : 0;
+    var px = a.x + t * dx - c.x, py = a.y + t * dy - c.y;
+    return px * px + py * py < r * r;
+  }
+  function arrange(cy) {
+    var base = { animate: false, fit: false, padding: 30 };
+    function opts(o) { Object.keys(base).forEach(function (k) { o[k] = base[k]; }); return o; }
+    var linked = cy.nodes().filter(function (n) { return n.degree(false) > 0; });
+    var lone = cy.nodes().difference(linked);
+    if (linked.length) {
+      var roots = cy.collection();
+      linked.union(cy.edges()).components().forEach(function (comp) {
+        var r = comp.nodes().filter(function (n) { return n.indegree(false) === 0; });
+        roots = roots.union(r.length ? r : comp.nodes()[0]);
+      });
+      linked.union(cy.edges()).layout(opts({ name: 'breadthfirst', directed: true, maximal: true, roots: roots, spacingFactor: 1.15 })).run();
+    }
+    if (lone.length) {
+      var bb = linked.length ? linked.boundingBox() : { x1: 0, y2: -80, w: 600 };
+      var w = Math.max(bb.w, 400), cols = Math.max(1, Math.floor(w / 130));
+      var rows = Math.ceil(lone.length / cols);
+      lone.layout(opts({ name: 'grid', cols: cols, rows: rows, avoidOverlap: true,
+        boundingBox: { x1: bb.x1, y1: bb.y2 + 80, w: w, h: rows * 70 } })).run();
+    }
+    cy.edges().forEach(function (e) {
+      var s = e.source(), t = e.target();
+      var hit = cy.nodes().some(function (n) {
+        return !n.same(s) && !n.same(t) && segmentHitsCircle(s.position(), t.position(), n.position(), NODE_R);
+      });
+      if (hit) e.addClass('detour');
+    });
+    cy.fit(undefined, 30);
+  }
 
   function renderGraph(S) {
     var pane = el('div', 'pane graph-pane');
@@ -370,9 +412,10 @@
       container: box,
       elements: graphElements(S),
       style: GRAPH_STYLE,
-      layout: { name: 'breadthfirst', directed: true, padding: 30, spacingFactor: 1.15 },
+      layout: { name: 'preset' },
       minZoom: 0.2, maxZoom: 3
     });
+    arrange(S.cy);
     S.cy.on('tap', 'node', function (evt) {
       var d = evt.target.data;
       if (d.call(evt.target, 'isTrigger')) return;
@@ -473,5 +516,5 @@
     else boot();
   }
 
-  return { render: render };
+  return { render: render, _segmentHitsCircle: segmentHitsCircle };
 });

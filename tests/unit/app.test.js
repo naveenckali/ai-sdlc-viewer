@@ -3,6 +3,8 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 const { JSDOM } = require('jsdom');
+const windows = [];
+test.after(() => windows.forEach(w => w.close()));
 const { loadDataFile } = require('../helpers/load-data.js');
 
 const VIEWER = path.join(__dirname, '../../skills/ai-sdlc-viewer/viewer');
@@ -14,7 +16,8 @@ function freshData() { return loadDataFile(FIXTURE); }
 function setup(data, opts = {}) {
   const dom = new JSDOM('<!DOCTYPE html><body><div id="root"></div></body>', { runScripts: 'outside-only' });
   const { window } = dom;
-  if (opts.cytoscape) window.cytoscape = opts.cytoscape;
+  windows.push(window);
+  if (opts.beforeLibs) opts.beforeLibs(window);
   for (const f of LIBS.concat(['app.js'])) window.eval(fs.readFileSync(path.join(VIEWER, f), 'utf8'));
   const root = window.document.getElementById('root');
   window.AISV.app.render(root, data);
@@ -195,20 +198,24 @@ test('no cytoscape global: graph tab shows the failure message', () => {
   assert.ok(root.textContent.includes('Graph library failed to load.'));
 });
 
-test('graph with a stub cytoscape: breadthfirst, webhook diamond, inferred dashed, toggle, node click', () => {
-  const calls = [];
-  const handlers = {};
-  function stub(opts) {
-    calls.push(opts);
-    return { on(ev, sel, fn) { handlers[ev + ' ' + sel] = fn; }, destroy() {} };
-  }
-  const { window, root } = setup(freshData(), { cytoscape: stub });
+// Real vendored cytoscape, forced headless (jsdom has no canvas). The wrapper lives in the page realm
+// because cytoscape only accepts options objects from its own realm.
+function setupRealGraph(data) {
+  const cyCalls = [];
+  const env = setup(data, { beforeLibs(window) {
+    window.eval(fs.readFileSync(path.join(VIEWER, 'vendor/cytoscape.min.js'), 'utf8'));
+    window.__calls = cyCalls;
+    window.eval('var __real = cytoscape; window.cytoscape = function (o) { window.__calls.push(o); ' +
+      'o.headless = true; o.styleEnabled = true; delete o.container; return (window.__cy = __real(o)); };');
+  } });
+  return Object.assign(env, { cyCalls });
+}
+
+test('graph (real cytoscape, headless): elements, webhook diamond, inferred dashed, toggle, node click', () => {
+  const { window, root, cyCalls } = setupRealGraph(freshData());
   tab(root, 'Skills Graph');
-  assert.strictEqual(calls.length, 1);
-  const opts = calls[0];
-  assert.strictEqual(opts.layout.name, 'breadthfirst');
-  assert.ok(opts.container && root.contains(opts.container));
-  const els = opts.elements;
+  assert.strictEqual(cyCalls.length, 1);
+  const els = cyCalls[0].elements;
   const hook = els.find(e => e.data.kind === 'webhook');
   assert.strictEqual(hook.data.shape, 'diamond');
   assert.strictEqual(hook.data.color, '#f59e0b');
@@ -216,20 +223,83 @@ test('graph with a stub cytoscape: breadthfirst, webhook diamond, inferred dashe
   const inf = els.find(e => e.data.inferred === true);
   assert.strictEqual(inf.data.lineStyle, 'dashed');
   assert.strictEqual(inf.data.label, 'inferred');
-  const calls_ = els.find(e => e.data.type === 'calls');
-  assert.strictEqual(calls_.data.lineStyle, 'solid');
+  assert.strictEqual(els.find(e => e.data.type === 'calls').data.lineStyle, 'solid');
+  const cy = window.__cy;
+  assert.strictEqual(cy.$id('trigger:webhook:Issue labeled needs-plan').style('shape'), 'diamond');
+  assert.strictEqual(cy.$id('e5').style('line-style'), 'dashed');
   const box = root.querySelector('input.show-inferred');
   assert.strictEqual(box.checked, true);
   box.checked = false;
   box.dispatchEvent(new window.Event('change'));
-  assert.strictEqual(calls.length, 2);
-  assert.ok(!calls[1].elements.some(e => e.data.inferred === true));
-  // clicking an item node goes to All tooling with it selected
-  const tap = handlers['tap node'];
-  assert.ok(tap);
-  tap({ target: { data: (k) => ({ id: 'reviewer', isTrigger: false })[k] } });
-  assert.ok(root.querySelector('.tab.on').textContent === 'All tooling');
+  assert.strictEqual(cyCalls.length, 2);
+  assert.ok(!cyCalls[1].elements.some(e => e.data.inferred === true));
+  window.__cy.$id('reviewer').emit('tap');
+  assert.strictEqual(root.querySelector('.tab.on').textContent, 'All tooling');
   assert.ok(root.querySelector('.detail h2').textContent.includes('reviewer'));
+});
+
+// independent copy of the geometry so this check does not trust app.js
+function hits(a, b, c, r) {
+  const dx = b.x - a.x, dy = b.y - a.y, len2 = dx * dx + dy * dy;
+  const t = len2 ? Math.max(0, Math.min(1, ((c.x - a.x) * dx + (c.y - a.y) * dy) / len2)) : 0;
+  return Math.hypot(a.x + t * dx - c.x, a.y + t * dy - c.y) < r;
+}
+function straightEdgeCrossesNode(cy) {
+  const bad = [];
+  cy.edges().forEach(e => {
+    if (e.hasClass('detour')) return;
+    const a = e.source().position(), b = e.target().position();
+    cy.nodes().forEach(n => {
+      if (n.same(e.source()) || n.same(e.target())) return;
+      if (hits(a, b, n.position(), 20)) bad.push(e.source().id() + '->' + e.target().id() + ' via ' + n.id());
+    });
+  });
+  return bad;
+}
+
+test('graph layout never draws an edge through an unrelated node', () => {
+  const { window, root } = setupRealGraph(freshData());
+  tab(root, 'Skills Graph');
+  const cy = window.__cy;
+  assert.deepStrictEqual(straightEdgeCrossesNode(cy), []);
+  // the reported case: style must not sit on the plan-feature -> reviewer edge
+  assert.ok(!hits(cy.$id('plan-feature').position(), cy.$id('reviewer').position(),
+    cy.$id('style-rule').position(), 20) || cy.$id('plan-feature').edgesTo(cy.$id('reviewer')).hasClass('detour'));
+  // unlinked nodes sit below every linked node
+  const linked = cy.nodes().filter(n => n.degree(false) > 0);
+  const lone = cy.nodes().filter(n => n.degree(false) === 0);
+  assert.ok(lone.length >= 4);
+  const maxLinkedY = Math.max(...linked.map(n => n.position('y')));
+  assert.ok(lone.every(n => n.position('y') > maxLinkedY));
+  // directed: roots (in-degree 0) above what they point at
+  assert.ok(cy.$id('checkout-spec').position('y') < cy.$id('plan-feature').position('y'));
+  assert.ok(cy.$id('plan-feature').position('y') < cy.$id('reviewer').position('y'));
+});
+
+test('graph layout bends an edge that would cross a node in the same column', () => {
+  const data = freshData();
+  // a -> b -> c plus a -> c: breadthfirst stacks a, b, c vertically, so a -> c passes through b
+  data.links = [
+    { from: 'db-migrator', to: 'style-rule', type: 'calls', inferred: true, reason: 'r' },
+    { from: 'style-rule', to: 'lint', type: 'calls', inferred: true, reason: 'r' },
+    { from: 'db-migrator', to: 'lint', type: 'calls', inferred: true, reason: 'r' }
+  ];
+  data.items.forEach(i => { i.triggers = []; });
+  const { window, root } = setupRealGraph(data);
+  tab(root, 'Skills Graph');
+  const cy = window.__cy;
+  assert.ok(cy.$id('db-migrator').edgesTo(cy.$id('lint')).hasClass('detour'), 'a -> c is bent around b');
+  assert.ok(!cy.$id('db-migrator').edgesTo(cy.$id('style-rule')).hasClass('detour'));
+  assert.deepStrictEqual(straightEdgeCrossesNode(cy), []);
+});
+
+test('segmentHitsCircle geometry', () => {
+  const { window } = setup(undefined);
+  const hit = window.AISV.app._segmentHitsCircle;
+  assert.strictEqual(hit({ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 0, y: 50 }, 20), true);
+  assert.strictEqual(hit({ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 30, y: 50 }, 20), false);
+  assert.strictEqual(hit({ x: 0, y: 0 }, { x: 0, y: 100 }, { x: 0, y: 130 }, 20), false);
+  assert.strictEqual(hit({ x: 5, y: 5 }, { x: 5, y: 5 }, { x: 5, y: 5 }, 1), true);
 });
 
 test('chains tabs render cards with steps, evidence and inferred toggle', () => {

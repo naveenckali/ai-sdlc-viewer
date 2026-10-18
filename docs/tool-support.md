@@ -6,14 +6,14 @@ The skill is checked end to end by scanning a fixture repo with known contents a
 
 - Fixture: `tests/fixtures/sample-repo/`, built into a git repo by `node tools/make-fixture.js <out-dir>` (`_gitignore` becomes `.gitignore`, so `.claude/settings.local.json` stays untracked).
 - Expectations: `tests/fixtures/sample-repo.expected.json` (items that must be found, specs, unclassified ADR, light scripts, local-only file, required, allowed (closed set) and forbidden links, webhook trigger, a fake GitHub token that must not appear, and the in-repo plugin copy that must be excluded).
-- Checker: `node tools/check-scan.js <scanned-dir> <expected.json>`. It also runs the viewer's validator, re-finds every evidence quote in its file (within 2 lines; each `[redacted]` matches one secret token) and requires a link's quote to name its target item, fails any link outside `mustHaveLinks` + `allowedLinks`, and proves only `ai-sdlc-viewer/` changed with `git status` plus a hash of every file (gitignored ones included) that make-fixture recorded in `.git/`.
+- Checker: `node tools/check-scan.js <scanned-dir> <expected.json>`. It also runs the viewer's validator, re-finds every evidence quote in its file (within 2 lines; each `[redacted]` matches one secret token) and requires a link's quote to name its target item, fails any link outside `mustHaveLinks` + `allowedLinks`, checks that all 11 viewer files are byte-for-byte copies of `skills/ai-sdlc-viewer/viewer/`, and proves only `ai-sdlc-viewer/` changed with `git status` plus a hash of every file (gitignored ones included) that make-fixture recorded in `.git/`.
 
-### Claude Code, 2026-10-18 (run 6, final)
+### Claude Code, 2026-10-18 (run 7, final)
 
 Claude Code 2.1.302 on Windows 11, Git Bash. Reproduce with:
 
 ```sh
-node tools/run-e2e.js <label>
+node tools/run-e2e.js run7
 ```
 
 `tools/run-e2e.js` does the following:
@@ -43,16 +43,21 @@ Why each pre-approved tool is there. Each one is a step SKILL.md asks for:
 
 `--setting-sources user` and `--strict-mcp-config` keep the fixture's own hook (`scripts/format.sh`) and its MCP server from running during the scan. The fixture's files are still read as data.
 
-**The harness copied the viewer files.** Claude Code protects plugin folders, so in headless mode it refuses `cp` out of a loaded plugin's folder without a person's approval. The agent's three `cp` commands were refused. As SKILL.md tells it to, the agent stopped there: it wrote `data.js` and reported the exact copy commands. The harness then copied the 11 unchanged viewer files. The scan, `data.js` and all evidence are the agent's. In an interactive session the same `cp` asks the user for approval instead.
+**The harness copied the viewer files.** Claude Code protects plugin folders, so in headless mode it refuses `cp` out of a loaded plugin's folder without a person's approval. The agent's three `cp` commands were refused. As SKILL.md tells it to, the agent stopped there: it wrote `data.js` and reported the exact copy commands. The harness then copied the viewer files that were missing. It never overwrites a file the agent copied, and the checker confirms every viewer file is byte-identical to the shipped one. The scan, `data.js` and all evidence are the agent's. In an interactive session the same `cp` asks the user for approval instead.
 
-Result (233 s, 57 turns, $1.04, 6 permission denials):
+Result of run 7, made with the committed runner and the shipped SKILL.md (189 s, 55 turns, $0.91, 8 permission denials). The agent's three `cp` commands were refused, and it reported "I didn't try to copy them another way". It wrote no files outside the repo.
 
 ```
-HARNESS COPY: Claude Code refused the agent's viewer copy (11 files missing); the harness copied the 11 viewer files. data.js is the agent's.
-PASS 71 checks
+HARNESS COPY: Claude Code refused the agent's viewer copy; the harness copied the 11 missing viewer file(s): index.html, viewer.css, app.js, lib/escape.js, lib/secrets.js, lib/validate.js, lib/model.js, lib/graph.js, lib/chains.js, vendor/cytoscape.min.js, vendor/LICENSE-cytoscape.txt. data.js is the agent's.
+PASS 85 checks
 ```
 
-The scan found 23 items, 5 quoted links and 3 unclassified files, and the repo's files were unchanged. The checker verifies that every file's hash matches, including gitignored files, and that every link is in the expected set and names its target.
+The checker confirmed four things:
+
+- every file's hash matches, gitignored files included;
+- every link is in the expected set and its quote names its target;
+- every evidence quote is in its file;
+- the viewer files are unchanged copies.
 
 Notes from earlier runs:
 
@@ -60,5 +65,6 @@ Notes from earlier runs:
 - **Runs 2 and 3** produced correct scan data (59 of 60 checks) but had no viewer files, because `cp` was refused.
 - **Run 4** passed (`PASS 59 checks`, against the earlier, weaker checker) only because the skill then told the agent to get around a refused `cp` by using `cat`. That instruction was removed: a skill must not route around a permission decision.
 - **Run 5** scanned correctly and respected the refusal. The harness's copy-refusal detection missed the agent's `mkdir … && cp …` chain, so its check failed on the missing `index.html` (1 of 76 checks). The detection was fixed.
-- **Run 6** is the final run above. Its transcript was saved under the label `run5`, then copied to `tmp-fixtures/e2e-run6.json`.
-- **In run 6 the agent also wrote a helper validation script to `%TEMP%`**, which was possible because `Write` was pre-approved. Since then `Write` and `Edit` are no longer pre-approved, and SKILL.md forbids creating files outside the repo or writing helper files for the optional validation. A probe confirmed that, without `Write` pre-approved, writes inside the repo still work and writes to `%TEMP%` are refused. No full run has been made since this last change.
+- **Run 6** (`PASS 71 checks`) still pre-approved `Write`/`Edit` and used older skill text. Its transcript was saved under the label `run5`, then copied to `tmp-fixtures/e2e-run6.json`.
+- **In run 6 the agent also wrote a helper validation script to `%TEMP%`**, which was possible because `Write` was pre-approved. Since then `Write` and `Edit` are no longer pre-approved, and SKILL.md forbids creating files outside the repo or writing helper files for the optional validation. A probe confirmed that, without `Write` pre-approved, writes inside the repo still work and writes to `%TEMP%` are refused.
+- **Run 7** is the final run above. It is the first made with the committed runner and the shipped skill text.

@@ -13,6 +13,11 @@ const { findSecrets } = require('../skills/ai-sdlc-viewer/viewer/lib/secrets.js'
 const { diffManifest } = require('./fixture-manifest.js');
 
 const OUT = 'ai-sdlc-viewer';
+const VIEWER_DIR = path.join(__dirname, '..', 'skills', 'ai-sdlc-viewer', 'viewer');
+// The shipped viewer files the scan must copy unchanged (SKILL.md step 10).
+const VIEWER_FILES = ['index.html', 'viewer.css', 'app.js',
+  'lib/escape.js', 'lib/secrets.js', 'lib/validate.js', 'lib/model.js', 'lib/graph.js', 'lib/chains.js',
+  'vendor/cytoscape.min.js', 'vendor/LICENSE-cytoscape.txt'];
 const REDACTED = '[redacted]';
 
 // Normalize a name for comparison: lowercase, drop a file extension and an
@@ -130,7 +135,13 @@ function checkScan(dir, expected) {
   const unclassified = Array.isArray(data.unclassified) ? data.unclassified : [];
   const candidates = Array.isArray(data.meta.candidates) ? data.meta.candidates : [];
 
-  check(fs.existsSync(path.join(dir, OUT, 'index.html')), 'missing ' + OUT + '/index.html');
+  // Every viewer file must be a byte-for-byte copy of the shipped one: never regenerated.
+  for (const f of VIEWER_FILES) {
+    const got = path.join(dir, OUT, ...f.split('/'));
+    if (!fs.existsSync(got)) { check(false, 'viewer file missing: ' + OUT + '/' + f); continue; }
+    check(fs.readFileSync(got).equals(fs.readFileSync(path.join(VIEWER_DIR, ...f.split('/')))),
+      'viewer file differs: ' + OUT + '/' + f);
+  }
 
   for (const sel of expected.mustFindItems || []) {
     check(findItems(items, sel).length > 0, 'missing item: ' + describe(sel));
@@ -264,7 +275,7 @@ function checkScan(dir, expected) {
   return { pass: failures.length === 0, failures, checks };
 }
 
-module.exports = { checkScan, quoteFound, quoteNamesItem, norm };
+module.exports = { checkScan, quoteFound, quoteNamesItem, norm, VIEWER_FILES, VIEWER_DIR };
 
 if (require.main === module) {
   const [dir, expectedFile] = process.argv.slice(2);

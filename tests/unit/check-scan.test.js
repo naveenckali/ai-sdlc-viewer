@@ -5,7 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
-const { checkScan } = require('../../tools/check-scan.js');
+const { checkScan, VIEWER_FILES, VIEWER_DIR } = require('../../tools/check-scan.js');
 const { writeManifest } = require('../../tools/fixture-manifest.js');
 
 const FAKE_TOKEN = 'ghp_' + 'A'.repeat(36);
@@ -87,7 +87,11 @@ function makeRepo(data) {
   git(dir, ['add', '-A']);
   git(dir, ['-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-q', '-m', 'init']);
   writeManifest(dir);
-  writeFile(dir, 'ai-sdlc-viewer/index.html', '<!doctype html>\n');
+  for (const f of VIEWER_FILES) {
+    const to = path.join(dir, 'ai-sdlc-viewer', ...f.split('/'));
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.copyFileSync(path.join(VIEWER_DIR, ...f.split('/')), to);
+  }
   writeFile(dir, 'ai-sdlc-viewer/data.js', 'window.AI_SDLC_DATA = ' + JSON.stringify(data || baseData(), null, 2) + ';\n');
   return dir;
 }
@@ -244,4 +248,14 @@ test('modifying a gitignored file is reported as repo modified', () => {
 test('[redacted] stands for one secret token, not a whole phrase', () => {
   const r = failuresFor((d) => { d.links[0].evidence.quote = 'then [redacted] agent'; });
   assertFailure(r, 'evidence quote not found');
+});
+
+test('a viewer file that differs from the shipped one is reported', () => {
+  const r = failuresFor(() => (dir) => fs.appendFileSync(path.join(dir, 'ai-sdlc-viewer', 'lib', 'graph.js'), '// edited\n'));
+  assertFailure(r, 'viewer file differs: ai-sdlc-viewer/lib/graph.js');
+});
+
+test('a missing viewer file is reported', () => {
+  const r = failuresFor(() => (dir) => fs.rmSync(path.join(dir, 'ai-sdlc-viewer', 'vendor', 'cytoscape.min.js')));
+  assertFailure(r, 'viewer file missing: ai-sdlc-viewer/vendor/cytoscape.min.js');
 });

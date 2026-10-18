@@ -12,7 +12,7 @@
 //    with the scoped tool allowlist below. Never --dangerously-skip-permissions.
 // 4. If the agent wrote data.js but Claude Code refused its viewer copy (headless Claude
 //    Code refuses `cp` out of a plugin folder without a person's approval), the HARNESS
-//    copies the 11 viewer files and says so. The scan, data.js and evidence stay the agent's.
+//    copies only the missing viewer files (never overwriting one) and says so. The scan, data.js and evidence stay the agent's.
 // 5. Runs tools/check-scan.js and exits with its status.
 // The JSON transcript summary goes to tmp-fixtures/e2e-<label>.json.
 'use strict';
@@ -26,10 +26,7 @@ const { makeFixture } = require('./make-fixture.js');
 const ROOT = path.join(__dirname, '..');
 const FIXTURE = path.join(ROOT, 'tmp-fixtures', 'e2e');
 const PLUGIN = path.join(os.tmpdir(), 'ai-sdlc-viewer-e2e-plugin');
-const VIEWER = path.join(ROOT, 'skills', 'ai-sdlc-viewer', 'viewer');
-const VIEWER_FILES = ['index.html', 'viewer.css', 'app.js',
-  'lib/escape.js', 'lib/secrets.js', 'lib/validate.js', 'lib/model.js', 'lib/graph.js', 'lib/chains.js',
-  'vendor/cytoscape.min.js', 'vendor/LICENSE-cytoscape.txt'];
+const { VIEWER_FILES, VIEWER_DIR: VIEWER } = require('./check-scan.js');
 
 // Each entry is something SKILL.md asks the agent to do. Nothing else is pre-approved.
 const ALLOWED_TOOLS = [
@@ -102,12 +99,13 @@ function main() {
   const out = path.join(FIXTURE, 'ai-sdlc-viewer');
   const missing = VIEWER_FILES.filter((f) => !fs.existsSync(path.join(out, f)));
   if (fs.existsSync(path.join(out, 'data.js')) && missing.length && copyWasDenied(result)) {
-    for (const f of VIEWER_FILES) {
+    // Copy only what is missing; never overwrite a file the agent copied.
+    for (const f of missing) {
       fs.mkdirSync(path.dirname(path.join(out, f)), { recursive: true });
       fs.copyFileSync(path.join(VIEWER, f), path.join(out, f));
     }
-    console.log('HARNESS COPY: Claude Code refused the agent\'s viewer copy (' + missing.length +
-      ' files missing); the harness copied the 11 viewer files. data.js is the agent\'s.');
+    console.log('HARNESS COPY: Claude Code refused the agent\'s viewer copy; the harness copied the ' +
+      missing.length + ' missing viewer file(s): ' + missing.join(', ') + '. data.js is the agent\'s.');
   }
 
   const c = spawnSync(process.execPath, [path.join(__dirname, 'check-scan.js'), FIXTURE,

@@ -21,11 +21,13 @@ Walk the whole working tree, not only tracked files, so local-only tooling isn't
 
 Never descend into, or list anything under:
 
-- `.git/`, `node_modules/`, `vendor/`, `dist/`, `build/`, `.venv/`, `target/`
+- `.git/`, `node_modules/`, `.venv/`, at any depth (for example `packages/web/node_modules/`).
+- `vendor/`, `dist/`, `build/`, `target/` **only** when the folder sits at the repo root or at a package root (a folder with its own `package.json`, `pyproject.toml`, `go.mod`, `Cargo.toml`, or similar), or when git ignores it (its files show up in `git ls-files --others --ignored --exclude-standard`). Elsewhere these are ordinary folder names.
+  - **Never apply these four names inside a tooling location**, at any depth, even when another rule above would: `.claude/`, `.cursor/`, `.github/`, `.agents/`, `.codex/`, `.kiro/`, `.specify/`, `specs/`, `scripts/`, `bin/`, `tools/`. For example `.claude/skills/build/SKILL.md` is a skill named `build`, and `scripts/dist/publish.sh` is a script.
 - `ai-sdlc-viewer/` (this plugin's own output) and `.ai-sdlc-viewer/` (its per-repo config; read `phases.json` from it in the Phases step, but don't list it as a candidate)
-- **any directory containing a `.ai-sdlc-viewer-plugin` marker** (this plugin installed inside the repo). Search for the marker file first and exclude each directory that holds it, at any depth.
-
-These excludes apply at any depth (for example `packages/web/node_modules/`).
+- **A plugin copy: a directory that holds all three of** a `.ai-sdlc-viewer-plugin` marker file, a `SKILL.md` whose frontmatter has `name: ai-sdlc-viewer`, and `viewer/index.html` (this plugin installed inside the repo). Search for the marker file first, at any depth, and check each directory that holds one. Exclude it only when all three are there.
+  - A marker without the other two is an ordinary file, not an exclude: a repo could otherwise hide its own tooling by dropping a marker next to it. Keep sweeping that folder as usual.
+  - Name every folder you excluded as a plugin copy, and every marker you treated as an ordinary file, in the final report.
 
 **Git submodules:** read `.gitmodules` if present. List each submodule's `path` as one candidate (the directory path, for example `libs/shared`), to become a `submodule` item. Don't descend into it: its contents belong to another repo.
 
@@ -96,6 +98,7 @@ Check every one of these, at the repo root **and inside every nested package** (
 - `scripts/`, `bin/`, `tools/` (every file in them)
 - `Makefile` / `makefile` / `*.mk` targets (the file is the candidate; each target becomes an item)
 - `package.json` `scripts` (the file is the candidate; each script becomes an item)
+- every package manifest (`package.json`, `pyproject.toml`, `go.mod`) at the root and in each nested package is a candidate, even one with no scripts; classification sends a manifest without scripts to `unclassified`
 - also `justfile`, `Taskfile.yml`, `pyproject.toml` `[project.scripts]` / `[tool.poetry.scripts]` / task-runner sections
 
 ### SDD specs

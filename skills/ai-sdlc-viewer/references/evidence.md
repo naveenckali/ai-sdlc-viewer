@@ -19,7 +19,7 @@ Pick the type the quote supports. If the quote says "run X", it is `calls`. If i
 - **A link requires a quote copied from the file that names or invokes the other item (or that passes output to it).** The quote names the other item by its name, command, path, or script name.
 - A non-inferred link has `inferred: false` and `evidence: {path, line, quote}`:
   - `path`: the repo-relative POSIX path of the file the quote is in (usually a file of the `from` item).
-  - `line`: **the evidence `line` is 1-based** (the first line of the file is line 1). It is the line where the quote starts.
+  - `line`: **the evidence `line` is 1-based** (the first line of the file is line 1). It is the line where the quote starts. Take it only from a tool that prints line numbers (a numbered file view, `grep -n`); never count by hand; frontmatter lines count.
   - `quote`: text copied exactly from that line, short (one line, the words that create the link). Don't paraphrase or join lines. The one allowed change is redaction: secret values are replaced with `[redacted]` (see redaction.md). Never paraphrase a quote to avoid a secret.
 - **Scripts are always their own items.** Any script, `scripts/`/`bin/`/`tools/` file, Makefile target, `package.json` script, or file a hook or workflow runs is a separate item, and the thing that runs it gets a link to it. Only non-runnable support files in a skill's or agent's own folder fold into that item (classification.md §3).
 - Both `from` and `to` must be ids of items you are writing. If the other end isn't an item (for example a third-party action, an external service), don't write a link; mention it in `whatItDoes` instead.
@@ -36,7 +36,7 @@ Pick the type the quote supports. If the quote says "run X", it is `calls`. If i
 
 ## 4. Triggers (on items)
 
-Triggers say what starts an item. They go in the item's `triggers` array, not in `links` (the viewer draws them as entry-point nodes). Each is `{type, detail, evidence?}`. Add `evidence` when a specific line states the trigger.
+Triggers say what starts an item. They go in the item's `triggers` array, not in `links` (the viewer draws them as entry-point nodes). Each is `{type, detail, evidence}`. **Every trigger except `user-command` must carry `evidence`** `{path, line, quote}`: the line that states the trigger (an `on:` key, a hook event name, a `globs:` / `applyTo:` / `alwaysApply:` line, a cron line). A trigger no line states is left out. The viewer draws each trigger as an entry step in the graph and chains, so an unquoted trigger would be an unproven step. (The validator warns about a trigger without evidence.)
 
 | type | Use for | Example `detail` |
 |---|---|---|
@@ -46,12 +46,12 @@ Triggers say what starts an item. They go in the item's `triggers` array, not in
 | `webhook` | External callers (see below) | `issue_comment` |
 | `ai-hook-event` | AI-tool hook events (`PreToolUse`, `PostToolUse`, `SessionStart`, `Stop`, Cursor hook events) | `PostToolUse (Edit\|Write)` |
 | `schedule` | Cron and scheduled runs | `cron 0 3 * * *` |
-| `other` | Anything else the file states, such as "called by another item" or "always loaded by Copilot" | `Loaded automatically for *.ts files` |
+| `other` | Anything else a line of the item's own files states that starts or loads it, such as "always loaded by Copilot" or a `globs:` value. Being called by another item is a link, not a trigger. Each `other` trigger is its own entry node (identical wording on two items doesn't join them) | `Loaded automatically for *.ts files` |
 
 - **CI triggers come from the `on:` keys** of a GitHub workflow (or `rules:` / `only:` / `workflow:` in GitLab, `trigger:` / `pr:` / `schedules:` in Azure Pipelines). Write one trigger per key, with the `on:` line as evidence.
 - **`repository_dispatch`, `workflow_dispatch` with external callers, `issue_comment`, `pull_request_target`, and generic webhook receivers are type `webhook`.** A `workflow_dispatch` is a webhook only when a file shows it is called from outside (an API call, another repo, a bot); otherwise it is `user-command` with detail `manual run (workflow_dispatch)`. A generic webhook receiver is any script or server in the repo whose file says it receives webhook/HTTP callbacks to start tooling.
-- Use the same `detail` wording for the same event across items, so they share one entry node.
-- Rules and instructions files that a tool loads automatically get a trigger of type `other` stating when they load (for example their `globs:` or `applyTo:` value). If the file doesn't say, use `[]`.
+- Use the same `detail` wording for the same event across items, so they share one entry node (all types except `other`).
+- Rules and instructions files that a tool loads automatically get a trigger of type `other` stating when they load (for example their `globs:` or `applyTo:` value), with that line as evidence. If the file doesn't say, use `[]`.
 
 ## 5. Self-verification
 

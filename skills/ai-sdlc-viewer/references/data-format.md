@@ -1,12 +1,12 @@
 # data.js format (schema version "1")
 
-`data.js` is a plain script that assigns one object to `window.AI_SDLC_DATA`:
+`data.js` is a plain script that assigns one object to `window.AI_SDLC_DATA`. Everything between `window.AI_SDLC_DATA = ` and the final `;` must be pure JSON (double-quoted keys and strings, no comments, no trailing commas):
 
 ```js
-window.AI_SDLC_DATA = { meta: {...}, phases: {...}, items: [...], links: [...], unclassified: [...] };
+window.AI_SDLC_DATA = {"meta": {...}, "phases": {...}, "items": [...], "links": [...], "unclassified": [...]};
 ```
 
-`?` marks an optional field. "or null" means null is allowed. All paths (except `meta.source`) are repo-relative, POSIX (`/`), never absolute, never containing `\`. Secrets are written as `[redacted]`.
+`?` marks an optional field. "or null" means null is allowed. All paths (except `meta.source`) are repo-relative, POSIX (`/`), never absolute, never containing `\` or a `..` segment. Secrets are written as `[redacted]`.
 
 ## meta
 
@@ -52,7 +52,7 @@ window.AI_SDLC_DATA = { meta: {...}, phases: {...}, items: [...], links: [...], 
 | triggers | array | What starts the item | |
 | triggers[].type | enum | `user-command` `git-event` `ci-event` `webhook` `ai-hook-event` `schedule` `other` | `"webhook"` |
 | triggers[].detail | string | Description of the trigger | `"Issue labeled needs-plan"` |
-| triggers[].evidence? | `{path, line, quote}` | Where it is stated: repo-relative path, line number (int >= 1), exact quote | `{"path":"a.md","line":8,"quote":"runs on label"}` |
+| triggers[].evidence | `{path, line, quote}` | Required on every trigger except `user-command` (the validator warns when it is missing). Where it is stated: repo-relative path, line number (int >= 1), exact quote | `{"path":"a.md","line":8,"quote":"runs on label"}` |
 | inputs | string[] | What it takes in. For `spec`: non-empty, or `["Not stated in the file"]` | `["Feature request text"]` |
 | outputs | string[] | What it produces. Same rule for `spec` | `["Implementation plan"]` |
 | phase | string or null | A `phases.list[].id`, or null | `"plan"` |

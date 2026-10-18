@@ -67,3 +67,36 @@ test('SKILL.md contains the load-bearing strings', () => {
     assert.ok(s.includes(needle), 'SKILL.md missing ' + needle);
   }
 });
+
+function ref(name) { return fs.readFileSync(path.join(SKILL_DIR, 'references', name), 'utf8'); }
+
+test('SKILL.md: no deletes, no helper scripts, no delegation, one copy form', () => {
+  const s = readSkill();
+  assert.ok(!/Delete then recreate/i.test(s), 'SKILL.md must not delete the output folder');
+  assert.ok(s.includes('Never run `rm`'), 'SKILL.md must forbid deletes');
+  assert.ok(s.includes('Never create a helper, batch, PowerShell or shell script'));
+  assert.ok(s.includes('Do the whole scan yourself'));
+  assert.ok(s.includes('Pick one copy form before you start'));
+  assert.ok(s.includes('is routing around the refusal'));
+  assert.ok(!/work too/.test(s), 'no alternate copy forms offered');
+  assert.ok(s.includes('never at the repo root first'));
+});
+
+test('discovery: plugin copy needs marker + SKILL.md + viewer/index.html; build names are scoped', () => {
+  const d = ref('discovery.md');
+  assert.ok(d.includes('all three of'));
+  assert.ok(d.includes('viewer/index.html'));
+  assert.ok(d.includes('Never apply these four names inside a tooling location'));
+  assert.ok(!/`vendor\/`, `dist\/`, `build\/`, `\.venv\/`, `target\/`\n/.test(d));
+});
+
+test('trigger evidence rule is stated consistently', () => {
+  assert.ok(readSkill().includes('Every trigger except `user-command` needs `evidence`'));
+  assert.ok(ref('evidence.md').includes('Every trigger except `user-command` must carry `evidence`'));
+  assert.ok(!ref('evidence.md').includes('such as "called by another item"'));
+  assert.ok(ref('data-format.md').includes('Required on every trigger except `user-command`'));
+});
+
+test('classification: manifest without scripts', () => {
+  assert.ok(ref('classification.md').includes('`package manifest without scripts`'));
+});

@@ -44,6 +44,7 @@ Pick by where the file lives and which tool reads it, not by what it mentions.
   - Example: `.claude/skills/release/SKILL.md` + `.claude/skills/release/templates/notes.md` + `.claude/skills/release/scripts/bump.sh` give two items. Item `release` has paths `[SKILL.md, templates/notes.md]`; item `bump` has paths `[scripts/bump.sh]`, with a `calls` link `release` → `bump` when `SKILL.md` names the script. A Claude hook entry whose command runs `scripts/format.sh` is a `hook` item, and the script is a `script` item, with a `triggers` link from the hook to the script.
 - **One file, many items:** each `package.json` script, Makefile target, MCP server entry, and AI-tool hook entry is its own item. Each lists the shared file (for example `package.json`) in `paths`. Give each an evidence-able name (`npm run lint` → name `lint`).
 - A config file that defines no item at all after reading (for example a `.claude/settings.json` with permissions only) goes in `unclassified` with a reason such as `settings without hooks or MCP servers`.
+- A package manifest (`package.json`, `pyproject.toml`, `go.mod`) that defines no scripts goes in `unclassified` with the reason `package manifest without scripts`. It still marks a package root for `package` (§7).
 - A Superpowers spec and plan are separate files and separate items. Spec Kit and Kiro feature folders are one item each.
 - A git submodule is a `submodule` item with `paths: ["<submodule path>"]`, `level: "full"`, summary from `.gitmodules` only (for example its URL, redacted if it has credentials).
 
@@ -108,6 +109,7 @@ In practice:
 Use `unclassified` for every candidate that you read and that is not part of any item. Write a specific reason:
 
 - `design doc, not used by AI tooling` (exact text for human design docs, ADRs, RFCs)
+- `package manifest without scripts` (exact text for a `package.json` / `pyproject.toml` / `go.mod` with no scripts)
 - `mentions AI agents but is project documentation, not tooling`
 - `frontmatter is for the docs site, not an AI tool`
 - `looks like tooling but its role is unclear: <what you saw>`

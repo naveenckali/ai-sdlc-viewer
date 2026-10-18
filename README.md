@@ -32,13 +32,13 @@ PowerShell: `install/install.ps1 -Tool <tool> [-Project <repo>]`. Each tool also
 
 | Tool | User-level dir | Project-level dir | Invoke |
 |---|---|---|---|
-| Claude Code | `~/.claude/skills/ai-sdlc-viewer/` | `.claude/skills/ai-sdlc-viewer/` | `/ai-sdlc-viewer:ai-sdlc-viewer` (plugin) or `/ai-sdlc-viewer` (skills folder) |
-| Copilot CLI | `~/.copilot/skills/ai-sdlc-viewer/` | `.github/skills/ai-sdlc-viewer/` | `/ai-sdlc-viewer` |
-| Copilot in VS Code | `~/.copilot/skills/ai-sdlc-viewer/` | `.github/skills/ai-sdlc-viewer/` | `/ai-sdlc-viewer` in chat |
-| Cursor | `~/.cursor/skills/ai-sdlc-viewer/` | `.cursor/skills/ai-sdlc-viewer/` | `/` in Agent chat, pick `ai-sdlc-viewer` |
-| Codex | `~/.agents/skills/ai-sdlc-viewer/` | `.agents/skills/ai-sdlc-viewer/` | `$ai-sdlc-viewer` or `/skills` |
+| Claude Code (smoke test passed) | `~/.claude/skills/ai-sdlc-viewer/` | `.claude/skills/ai-sdlc-viewer/` | `/ai-sdlc-viewer:ai-sdlc-viewer` (plugin) or `/ai-sdlc-viewer` (skills folder) |
+| Copilot CLI (smoke test failed, see docs/tool-support.md) | `~/.copilot/skills/ai-sdlc-viewer/` | `.github/skills/ai-sdlc-viewer/` | `/ai-sdlc-viewer` |
+| Copilot in VS Code (not yet verified) | `~/.copilot/skills/ai-sdlc-viewer/` | `.github/skills/ai-sdlc-viewer/` | `/ai-sdlc-viewer` in chat |
+| Cursor (not yet verified) | `~/.cursor/skills/ai-sdlc-viewer/` | `.cursor/skills/ai-sdlc-viewer/` | `/` in Agent chat, pick `ai-sdlc-viewer` |
+| Codex (smoke test passed) | `~/.agents/skills/ai-sdlc-viewer/` | `.agents/skills/ai-sdlc-viewer/` | `$ai-sdlc-viewer` or `/skills` |
 
-The per-repo fallback copies the skill into the repo being scanned. The copy carries a `.ai-sdlc-viewer-plugin` marker, so the scan never reports it as part of your repo; you may still want to commit or ignore it. See [docs/tool-support.md](docs/tool-support.md) for sources and for which tools have been smoke-tested (Claude Code, Codex and Copilot CLI have been run; Cursor and Copilot in VS Code are `not yet verified`).
+The per-repo fallback copies the skill into the repo being scanned. The copy carries a `.ai-sdlc-viewer-plugin` marker, so the scan never reports it as part of your repo; you may still want to commit or ignore it. See [docs/tool-support.md](docs/tool-support.md) for sources and for which tools have been smoke-tested (Claude Code: pass. Codex: pass. Copilot CLI: failed, 7 of 76 checks, see "Cross-tool smoke tests" in that file. Cursor and Copilot in VS Code: `not yet verified`).
 
 ## Usage
 

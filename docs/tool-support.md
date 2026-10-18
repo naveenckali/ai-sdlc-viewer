@@ -116,9 +116,9 @@ These are skill-following problems in Copilot CLI's run, not harness problems. N
 
 For Cursor and Copilot in VS Code. Do not tick a row until you have run it.
 
-1. `node tools/make-fixture.js C:	mpx` (any empty path).
+1. `node tools/make-fixture.js C:/tmp/fx` (any empty path).
 2. Install into the fixture, project level:
-   - Cursor: `install/install.sh --tool cursor --project C:/tmp/fx` (PowerShell: `install/install.ps1 -Tool cursor -Project C:	mpx`). Installs to `.cursor/skills/ai-sdlc-viewer/`.
+   - Cursor: `install/install.sh --tool cursor --project C:/tmp/fx` (PowerShell: `install/install.ps1 -Tool cursor -Project C:/tmpx`). Installs to `.cursor/skills/ai-sdlc-viewer/`.
    - Copilot in VS Code: same with `--tool copilot`. Installs to `.github/skills/ai-sdlc-viewer/`.
 3. Commit the install in the fixture and re-record the manifest, so the check compares with the post-install state: `git -C C:/tmp/fx add -A && git -C C:/tmp/fx commit -m install`, then `node -e "require('./tools/fixture-manifest.js').writeManifest('C:/tmp/fx')"`.
 4. Open `C:/tmp/fx` in the tool. Cursor: open Agent chat, type `/`, pick `ai-sdlc-viewer`. Copilot in VS Code: in chat (Agent mode) type `/ai-sdlc-viewer`. Approve the file writes and `cp` commands it asks for.

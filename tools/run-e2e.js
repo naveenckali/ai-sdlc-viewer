@@ -122,7 +122,14 @@ function copyWasDenied(result) {
   return denials.some((d) => /(^|[\s;&|(])(cp|Copy-Item)\s/.test(String((d.tool_input || {}).command || '')));
 }
 
+const USAGE = 'usage: node tools/run-e2e.js [label] [--reuse] [--tool claude|copilot-cli|codex]';
+const KNOWN_FLAGS = ['--reuse', '--tool'];
+
 function main() {
+  const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) { console.log(USAGE); process.exit(0); }
+  const bad = args.filter((a) => a.startsWith('-') && !KNOWN_FLAGS.includes(a));
+  if (bad.length) { console.error('unknown option: ' + bad.join(' ') + '\n' + USAGE); process.exit(2); }
   const argv = process.argv.slice(2);
   const reuse = argv.includes('--reuse');
   const ti = argv.indexOf('--tool');

@@ -259,3 +259,40 @@ test('a missing viewer file is reported', () => {
   const r = failuresFor(() => (dir) => fs.rmSync(path.join(dir, 'ai-sdlc-viewer', 'vendor', 'cytoscape.min.js')));
   assertFailure(r, 'viewer file missing: ai-sdlc-viewer/vendor/cytoscape.min.js');
 });
+
+test('data.js that is a JS object literal, not JSON, is reported', () => {
+  const r = failuresFor(() => (dir) => writeFile(dir, 'ai-sdlc-viewer/data.js',
+    'window.AI_SDLC_DATA = ' + JSON.stringify(baseData()).replace(/"meta":/, 'meta:') + ';\n'));
+  assertFailure(r, 'data.js is not pure JSON');
+});
+
+test('data.js with anything besides the one assignment is reported', () => {
+  const r = failuresFor(() => (dir) => writeFile(dir, 'ai-sdlc-viewer/data.js',
+    'window.AI_SDLC_DATA = ' + JSON.stringify(baseData()) + ';\nwindow.x = 1;\n'));
+  assertFailure(r, 'data.js is not pure JSON');
+});
+
+test('an ownDescription that is not in its main file is reported', () => {
+  const r = failuresFor((d) => { d.items[1].ownDescription = 'Reviews things carefully.'; });
+  assertFailure(r, 'ownDescription not verbatim: b');
+});
+
+test('an ownDescription matches across whitespace and [redacted] spans', () => {
+  const r = failuresFor((d) => { d.items[5].ownDescription = 'run: npm run lint\n --token=[redacted]'; });
+  assert.deepStrictEqual(r.failures, []);
+});
+
+test('an ownDescription that is only [redacted] is reported', () => {
+  const r = failuresFor((d) => { d.items[5].ownDescription = '[redacted]'; });
+  assertFailure(r, 'ownDescription not verbatim');
+});
+
+test('quoteFound refuses paths that leave the repo', () => {
+  const { quoteFound } = require('../../tools/check-scan.js');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'qf-'));
+  try {
+    writeFile(dir, 'inner/a.md', 'hello world\n');
+    assert.strictEqual(quoteFound(path.join(dir, 'inner'), { path: 'a.md', line: 1, quote: 'hello world' }), true);
+    assert.strictEqual(quoteFound(path.join(dir, 'inner', 'x'), { path: '../a.md', line: 1, quote: 'hello world' }), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

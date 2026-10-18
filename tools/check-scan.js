@@ -96,18 +96,42 @@ function escapeRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 // Does `quote` (whitespace-normalized; each [redacted] matches one run of
 // non-space characters, optionally after "Bearer "/"Basic "/"Token ") occur
 // in <dir>/<path> within ±2 lines of `line`?
+// A repo-relative POSIX path that stays inside the repo (no "..", no absolute or drive path).
+function insideRepo(p) {
+  return typeof p === 'string' && p !== '' && !p.includes('\\') && !p.startsWith('/') &&
+    !/^[A-Za-z]:/.test(p) && !p.split('/').includes('..');
+}
+
+function readRepoFile(dir, p) {
+  if (!insideRepo(p)) return null;
+  try { return fs.readFileSync(path.join(dir, ...p.split('/')), 'utf8'); } catch (e) { return null; }
+}
+
+// Does `copied` (whitespace-normalized; each [redacted] matches one run of non-space
+// characters, optionally after "Bearer "/"Basic "/"Token ") occur in `text`?
+function copiedFrom(copied, text) {
+  // Copied text that is only [redacted] spans proves nothing.
+  if (!ws(copied.split(REDACTED).join(''))) return false;
+  const pattern = ws(copied).split(REDACTED).map(escapeRe).join('(?:(?:Bearer|Basic|Token) )?\\S+?');
+  return new RegExp(pattern).test(ws(text));
+}
+
+// Does the evidence quote occur in <dir>/<path> within ±2 lines of `line`?
 function quoteFound(dir, ev) {
   if (!ev || typeof ev.path !== 'string' || typeof ev.quote !== 'string') return false;
-  const file = path.join(dir, ...ev.path.split('/'));
-  let text;
-  try { text = fs.readFileSync(file, 'utf8'); } catch (e) { return false; }
+  const text = readRepoFile(dir, ev.path);
+  if (text === null) return false;
   const lines = text.split(/\r?\n/);
   const start = Math.max(0, ev.line - 3);
-  const windowText = ws(lines.slice(start, ev.line + 2).join('\n'));
-  const pattern = ws(ev.quote).split(REDACTED).map(escapeRe).join('(?:(?:Bearer|Basic|Token) )?\\S+?');
-  // A quote that is only [redacted] spans proves nothing.
-  if (!ws(ev.quote.split(REDACTED).join(''))) return false;
-  return new RegExp(pattern).test(windowText);
+  return copiedFrom(ev.quote, lines.slice(start, ev.line + 2).join('\n'));
+}
+
+// data.js must be exactly `window.AI_SDLC_DATA = <JSON>;` (a leading BOM is tolerated).
+const DATA_RE = /^window\.AI_SDLC_DATA = ([\s\S]*);\s*$/;
+function pureJson(raw) {
+  const m = DATA_RE.exec(raw.replace(/^﻿/, ''));
+  if (!m) return false;
+  try { JSON.parse(m[1]); return true; } catch (e) { return false; }
 }
 
 function checkScan(dir, expected) {
@@ -124,6 +148,8 @@ function checkScan(dir, expected) {
   } catch (e) {
     return { pass: false, failures: ['cannot load ' + OUT + '/data.js: ' + e.message], checks: 1 };
   }
+
+  check(pureJson(raw), 'data.js is not pure JSON: it must be exactly "window.AI_SDLC_DATA = <JSON>;"');
 
   const v = validate(data);
   check(!v.fatal, 'validate fatal: ' + v.fatal);
@@ -250,6 +276,15 @@ function checkScan(dir, expected) {
     check(quoteFound(dir, t.evidence), 'evidence quote not found: trigger on ' + it.id + ' at ' +
       t.evidence.path + ':' + t.evidence.line + ' "' + t.evidence.quote + '"');
   }));
+
+  // ownDescription is quoted in the viewer, so it must be copied verbatim from the item's main file.
+  for (const it of items) {
+    if (it.ownDescription === null || it.ownDescription === undefined) continue;
+    const main = Array.isArray(it.paths) ? it.paths[0] : undefined;
+    const text = readRepoFile(dir, main);
+    check(typeof it.ownDescription === 'string' && text !== null && copiedFrom(it.ownDescription, text),
+      'ownDescription not verbatim: ' + it.id + ' "' + String(it.ownDescription).slice(0, 80) + '" is not in ' + main);
+  }
 
   // The scan must leave the repo untouched apart from the output folder.
   let status = null;

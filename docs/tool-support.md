@@ -1,5 +1,27 @@
 # Tool support
 
+## Where each tool loads the skill
+
+Verified against each tool's official docs on 2026-10-18. The installers (`install/install.sh`, `install/install.ps1`) hard-code the directories in this table, and `tests/unit/install.test.js` checks them.
+
+| Tool (`--tool`) | User-level dir | Project-level dir | Invoke | Source |
+|---|---|---|---|---|
+| Claude Code (`claude`) | `~/.claude/skills/ai-sdlc-viewer/`; or install as a plugin (`/plugin marketplace add naveenckali/ai-sdlc-viewer`, then `/plugin install ai-sdlc-viewer@ai-sdlc-viewer`) | `.claude/skills/ai-sdlc-viewer/` | Plugin: `/ai-sdlc-viewer:ai-sdlc-viewer`. Copied into a skills dir: `/ai-sdlc-viewer` | https://code.claude.com/docs/en/skills |
+| Copilot CLI (`copilot-cli`) | `~/.copilot/skills/ai-sdlc-viewer/` (also reads `~/.agents/skills`) | `.github/skills/ai-sdlc-viewer/` (also reads `.claude/skills`, `.agents/skills`) | `/ai-sdlc-viewer` in the prompt, or let Copilot pick it from the description; `/skills` lists skills | https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/create-skills |
+| GitHub Copilot in VS Code (`copilot`) | `~/.copilot/skills/ai-sdlc-viewer/` (also reads `~/.claude/skills`, `~/.agents/skills`) | `.github/skills/ai-sdlc-viewer/` (also reads `.claude/skills`, `.agents/skills`) | Type `/ai-sdlc-viewer` in chat; `/skills` opens Configure Skills | https://code.visualstudio.com/docs/copilot/customization/agent-skills |
+| Cursor (`cursor`) | `~/.cursor/skills/ai-sdlc-viewer/` (also reads `~/.agents/skills`) | `.cursor/skills/ai-sdlc-viewer/` (also reads `.agents/skills`) | Type `/` in Agent chat and pick `ai-sdlc-viewer`, or let the agent choose | https://cursor.com/docs/skills |
+| Codex (`codex`) | `~/.agents/skills/ai-sdlc-viewer/` | `.agents/skills/ai-sdlc-viewer/` (scanned from the working directory up to the repo root) | `$ai-sdlc-viewer` or `/skills`; or implicit by description | https://learn.chatgpt.com/docs/build-skills.md (redirected from https://developers.openai.com/codex/skills) |
+
+Notes:
+
+- All five tools support user-level skills, so no row is project-level only. `--project <repo>` (the per-repo fallback of spec 7.2) is optional everywhere.
+- Every installer copies the whole `skills/ai-sdlc-viewer/` folder, including its `.ai-sdlc-viewer-plugin` marker file, and nothing else. The scan excludes any folder carrying that marker, so a per-repo copy is never reported as part of the scanned repo. No wrapper or command files are placed outside that folder: all five tools make a skill invocable from the skill folder alone.
+- Copilot CLI and Copilot in VS Code share `~/.copilot/skills` and `.github/skills`, so installing for one makes the skill available to both.
+- Copilot CLI also supports plugins (manifest at the plugin root, `skills/NAME/SKILL.md`; `copilot plugin install ./dir`). The docs page checked does not state that it reads `.claude-plugin/plugin.json`, so plugin-style install for Copilot CLI is `unverified`; use the skills-directory install above.
+- Claude Code in headless (`-p`) runs refuses `cp` that reads from a loaded plugin folder. The skill then writes `data.js` and prints the exact copy commands for you to run. In an interactive session Claude Code asks you to approve the `cp` instead. A copy installed under `~/.claude/skills` is a user skill, not a plugin, so it is not subject to the plugin-folder protection (not separately tested).
+- Only Claude Code (the plugin path, run 7 below) has been run end to end. The other four tools are verified for file locations only; no scan has been run in them.
+- Install commands: `install/install.sh --tool <tool> [--project <repo>]` (bash) or `install/install.ps1 -Tool <tool> [-Project <repo>]` (PowerShell). They print the destination, exit non-zero on an unknown tool, replace an earlier copy of this skill on re-run, and refuse to touch an existing destination that lacks the marker file.
+
 ## End-to-end evaluation
 
 The skill is checked end to end by scanning a fixture repo with known contents and comparing the result with a list of expectations.

@@ -58,6 +58,7 @@ function copyPlugin() {
 }
 
 function runClaude(label) {
+  if (process.env.AISV_E2E_DRY_RUN === '1') throw new Error('AISV_E2E_DRY_RUN is set');
   copyPlugin();
   makeFixture(FIXTURE);
   const args = ['-p', '/ai-sdlc-viewer:ai-sdlc-viewer', '--plugin-dir', PLUGIN, '--add-dir', PLUGIN,
@@ -84,6 +85,7 @@ const COPILOT_ALLOW = ['shell(git ls-files)', 'shell(git rev-parse)', 'shell(git
 // Non-Claude tools: project-level install into the fixture, commit it, re-record the manifest
 // (so "repo modified" compares with the post-install state), then run the tool headless.
 function runOther(tool, label) {
+  if (process.env.AISV_E2E_DRY_RUN === '1') throw new Error('AISV_E2E_DRY_RUN is set');
   if (!PROJECT_DIR[tool]) throw new Error('unsupported --tool ' + tool);
   makeFixture(FIXTURE);
   const inst = spawnSync('bash', [path.join(ROOT, 'install', 'install.sh'), '--tool', tool, '--project', FIXTURE], { encoding: 'utf8' });
@@ -122,7 +124,7 @@ function copyWasDenied(result) {
   return denials.some((d) => /(^|[\s;&|(])(cp|Copy-Item)\s/.test(String((d.tool_input || {}).command || '')));
 }
 
-const USAGE = 'usage: node tools/run-e2e.js [label] [--reuse] [--tool claude|copilot-cli|codex]';
+const USAGE = 'usage: node tools/run-e2e.js [label] [--reuse] [--tool claude|copilot-cli|codex]  (AISV_E2E_DRY_RUN=1: print only)';
 const KNOWN_FLAGS = ['--reuse', '--tool'];
 
 function main() {
@@ -136,6 +138,11 @@ function main() {
   const tool = ti >= 0 ? argv[ti + 1] : 'claude';
   const rest = argv.filter((a, i) => !a.startsWith('--') && i !== ti + 1);
   const label = rest[0] || 'run';
+  if (process.env.AISV_E2E_DRY_RUN === '1') {
+    // Safety net for tests: never build a fixture or spawn a tool.
+    console.log('DRY RUN: would run tool ' + tool + ' with label ' + label + (reuse ? ' (reuse)' : '') + '; nothing spawned');
+    process.exit(0);
+  }
   let result;
   let other = null;
   if (tool !== 'claude') {

@@ -8,6 +8,7 @@
 
   var TITLE = 'AI SDLC Skills/Spec Viewer';
   var NO_DATA = 'No scan data found. Run /ai-sdlc-viewer in this repo to generate it.';
+  var BROKEN_DATA = 'data.js could not be read (it is not valid JavaScript). Re-run /ai-sdlc-viewer in this repo to regenerate it.';
   var NO_TOOLING = 'No AI or SDLC tooling found in this repo.';
   var NOT_STATED = 'Not stated in the file';
   var NO_GRAPH_LIB = 'Graph library failed to load.';
@@ -68,10 +69,12 @@
   }
 
   // ---------- render ----------
-  function render(rootEl, data) {
+  // opts.broken: data.js was there but threw while loading (a syntax error, a scan that died mid-write).
+  function render(rootEl, data, opts) {
     if (!rootEl) return;
     doc = rootEl.ownerDocument;
     rootEl.textContent = '';
+    if (opts && opts.broken) { add(rootEl, el('div', 'message', BROKEN_DATA)); return; }
     if (data === undefined || data === null) { add(rootEl, el('div', 'message', NO_DATA)); return; }
     var v = lib('validate').validate(data);
     if (v.fatal) { add(rootEl, el('div', 'message', v.fatal)); return; }
@@ -96,14 +99,17 @@
       unclassified: arr(data.unclassified).filter(isObj),
       phases: isObj(data.phases) ? arr(data.phases.list).filter(isObj) : [],
       groups: model.groups(items),
-      byId: {}, groupOf: {}, collapsed: {},
-      selectedId: null, query: '', showInferred: true, cy: null, tab: 'all'
+      // Rows and the detail pane are keyed by list position (displayNo), so a duplicate id (a
+      // validator error) never hides an item. byId (first wins) only resolves link endpoints.
+      byId: {}, byNo: {}, flat: [], groupOf: {}, collapsed: {},
+      selectedNo: null, query: '', showInferred: true, cy: null, tab: 'all'
     };
     S.data = { items: S.items, links: S.links };
     S.groups.forEach(function (g) {
       g.items.forEach(function (it) {
-        if (!S.byId[it.id]) { S.byId[it.id] = it; S.groupOf[it.id] = g.key; }
-        if (S.selectedId === null) S.selectedId = it.id;
+        S.byNo[it.displayNo] = it; S.flat.push(it); S.groupOf[it.displayNo] = g.key;
+        if (!S.byId[it.id]) S.byId[it.id] = it;
+        if (S.selectedNo === null) S.selectedNo = it.displayNo;
       });
     });
 
@@ -167,10 +173,10 @@
     fn(S, key);
   }
 
-  function selectItem(S, id) {
-    if (!S.byId[id]) return;
-    S.selectedId = id;
-    S.collapsed[S.groupOf[id]] = false;
+  function selectItem(S, it) {
+    if (!it) return;
+    S.selectedNo = it.displayNo;
+    S.collapsed[S.groupOf[it.displayNo]] = false;
     switchTab(S, 'all');
   }
 
@@ -211,11 +217,11 @@
       var body = el('div', 'grp-items');
       body.hidden = collapsed;
       matches.forEach(function (it) {
-        var row = el('div', 'item' + (it.id === S.selectedId ? ' on' : ''));
+        var row = el('div', 'item' + (it.displayNo === S.selectedNo ? ' on' : ''));
         add(row, el('span', 'n', it.displayNo), el('span', 'name', it.name),
           badge(it.kind, 'kind k-' + it.ecosystem), it.localOnly ? badge('local only', 'local') : null);
         row.title = arr(it.paths).join('\n');
-        row.addEventListener('click', function () { S.selectedId = it.id; refresh(); });
+        row.addEventListener('click', function () { S.selectedNo = it.displayNo; refresh(); });
         body.appendChild(row);
       });
       add(list, head, body);
@@ -239,7 +245,7 @@
 
   function renderDetail(S, sec) {
     sec.textContent = '';
-    var it = S.byId[S.selectedId];
+    var it = S.byNo[S.selectedNo];
     if (!it) return;
     add(sec, add(el('h2'), el('span', 'n', it.displayNo), el('span', 'name', it.name), ' ', badge(it.kind, 'kind k-' + it.ecosystem),
       it.localOnly ? badge('local only', 'local') : null));
@@ -303,7 +309,7 @@
         var other = S.byId[r[2] ? l.to : l.from];
         var link = el('a', 'rel', other ? other.name : (r[2] ? l.to : l.from));
         link.href = '#';
-        link.addEventListener('click', function (e) { e.preventDefault(); selectItem(S, other.id); });
+        link.addEventListener('click', function (e) { e.preventDefault(); selectItem(S, other); });
         add(row, add(el('div', 'conn'), link, ' ', provenance(l)));
       });
       box.appendChild(row);
@@ -355,7 +361,7 @@
       'font-size': 9, color: '#8a93a6', 'text-background-color': '#0f1117', 'text-background-opacity': 1,
       'text-background-padding': 2 } },
     { selector: 'edge[?inferred]', style: { 'line-style': 'dashed' } },
-    { selector: 'edge.detour', style: { 'curve-style': 'unbundled-bezier', 'control-point-distances': 60,
+    { selector: 'edge.detour', style: { 'curve-style': 'unbundled-bezier', 'control-point-distances': 'data(detour)',
       'control-point-weights': 0.5 } }
   ];
 
@@ -368,6 +374,28 @@
     var t = len2 ? Math.max(0, Math.min(1, ((c.x - a.x) * dx + (c.y - a.y) * dy) / len2)) : 0;
     var px = a.x + t * dx - c.x, py = a.y + t * dy - c.y;
     return px * px + py * py < r * r;
+  }
+  // A bent edge is a quadratic bezier whose control point is the midpoint pushed `d` along the
+  // left normal of a->b (cytoscape's unbundled-bezier with one control point at weight 0.5).
+  function curveClears(a, b, d, others, r) {
+    var len = Math.sqrt((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)) || 1;
+    var c = { x: (a.x + b.x) / 2 - (b.y - a.y) / len * d, y: (a.y + b.y) / 2 + (b.x - a.x) / len * d };
+    var prev = a, STEPS = 32;
+    for (var i = 1; i <= STEPS; i++) {
+      var t = i / STEPS, u = 1 - t;
+      var p = { x: u * u * a.x + 2 * u * t * c.x + t * t * b.x, y: u * u * a.y + 2 * u * t * c.y + t * t * b.y };
+      for (var k = 0; k < others.length; k++) if (segmentHitsCircle(prev, p, others[k], r)) return false;
+      prev = p;
+    }
+    return true;
+  }
+  // Try +60, -60, +120, -120, ... and keep the first offset whose curve clears every other node.
+  function detourDistance(a, b, others, r) {
+    for (var d = 60; d <= 960; d += 60) {
+      if (curveClears(a, b, d, others, r)) return d;
+      if (curveClears(a, b, -d, others, r)) return -d;
+    }
+    return 60;
   }
   function arrange(cy) {
     var base = { animate: false, fit: false, padding: 30 };
@@ -391,10 +419,10 @@
     }
     cy.edges().forEach(function (e) {
       var s = e.source(), t = e.target();
-      var hit = cy.nodes().some(function (n) {
-        return !n.same(s) && !n.same(t) && segmentHitsCircle(s.position(), t.position(), n.position(), NODE_R);
-      });
-      if (hit) e.addClass('detour');
+      var others = cy.nodes().filter(function (n) { return !n.same(s) && !n.same(t); })
+        .map(function (n) { return n.position(); });
+      var hit = others.some(function (p) { return segmentHitsCircle(s.position(), t.position(), p, NODE_R); });
+      if (hit) { e.data('detour', detourDistance(s.position(), t.position(), others, NODE_R)); e.addClass('detour'); }
     });
     cy.fit(undefined, 30);
   }
@@ -408,18 +436,25 @@
     if (typeof root.cytoscape === 'undefined') { add(pane, el('div', 'message', NO_GRAPH_LIB)); return; }
     var box = el('div', 'cy');
     pane.appendChild(box);
-    S.cy = root.cytoscape({
-      container: box,
-      elements: graphElements(S),
-      style: GRAPH_STYLE,
-      layout: { name: 'preset' },
-      minZoom: 0.2, maxZoom: 3
-    });
-    arrange(S.cy);
+    try {
+      S.cy = root.cytoscape({
+        container: box,
+        elements: graphElements(S),
+        style: GRAPH_STYLE,
+        layout: { name: 'preset' },
+        minZoom: 0.2, maxZoom: 3
+      });
+      arrange(S.cy);
+    } catch (e) {
+      if (S.cy) { try { S.cy.destroy(); } catch (e2) { /* ignore */ } S.cy = null; }
+      pane.removeChild(box);
+      add(pane, el('div', 'message', 'The graph could not be drawn: ' + (e && e.message)));
+      return;
+    }
     S.cy.on('tap', 'node', function (evt) {
       var d = evt.target.data;
       if (d.call(evt.target, 'isTrigger')) return;
-      selectItem(S, d.call(evt.target, 'id'));
+      selectItem(S, S.byId[d.call(evt.target, 'id')]);
     });
   }
 
@@ -472,8 +507,7 @@
     var board = el('div', 'phase-board');
     var ids = {};
     S.phases.forEach(function (p) { ids[p.id] = true; });
-    var flat = Object.keys(S.byId).map(function (id) { return S.byId[id]; })
-      .sort(function (a, b) { return a.displayNo - b.displayNo; });
+    var flat = S.flat;
     var cols = S.phases.map(function (p) {
       return { name: p.name || p.id, desc: p.description, items: flat.filter(function (it) { return it.phase === p.id; }) };
     });
@@ -484,7 +518,7 @@
       c.items.forEach(function (it) {
         var pc = add(el('div', 'pcard'), add(el('div', 'pname'), el('span', 'n', it.displayNo), it.name),
           el('div', stated(it.sdlcRole) ? 'prole' : 'prole not-stated', stated(it.sdlcRole) ? it.sdlcRole : NOT_STATED));
-        pc.addEventListener('click', function () { selectItem(S, it.id); });
+        pc.addEventListener('click', function () { selectItem(S, it); });
         col.appendChild(pc);
       });
       board.appendChild(col);
@@ -510,11 +544,11 @@
   if (typeof document !== 'undefined' && document.addEventListener) {
     var boot = function () {
       var app = document.getElementById('app');
-      if (app) render(app, root.AI_SDLC_DATA_MISSING ? undefined : root.AI_SDLC_DATA);
+      if (app) render(app, root.AI_SDLC_DATA_MISSING ? undefined : root.AI_SDLC_DATA, { broken: !!root.AI_SDLC_DATA_BROKEN });
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot);
     else boot();
   }
 
-  return { render: render, _segmentHitsCircle: segmentHitsCircle };
+  return { render: render, _segmentHitsCircle: segmentHitsCircle, _detourDistance: detourDistance };
 });

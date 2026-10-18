@@ -64,3 +64,18 @@ test('countLabel and empty groups', () => {
   assert.strictEqual(model.countLabel(3, 31), '3 of 31 items');
   assert.deepStrictEqual(model.groups([]), []);
 });
+
+test('chips account for every item: cross-tool, git and generic items go under Other', () => {
+  const mk = (id, kind, ecosystem) => ({ id, name: id, kind, ecosystem, level: 'full', package: null, paths: [] });
+  const items = [mk('a', 'instructions', 'cross-tool'), mk('b', 'other', 'generic'), mk('c', 'submodule', 'git'),
+    mk('d', 'skill', 'claude'), mk('e', 'hook', 'git')];
+  const chips = model.chips({ items });
+  const by = Object.fromEntries(chips.map(c => [c.label, c.count]));
+  assert.strictEqual(by.Other, 3);
+  assert.strictEqual(by.Claude, 1);
+  assert.strictEqual(by.Hooks, 1);
+  assert.strictEqual(chips[chips.length - 1].label, 'Other');
+  assert.strictEqual(chips.reduce((n, c) => n + c.count, 0), items.length);
+  const all = model.chips(data);
+  assert.strictEqual(all.reduce((n, c) => n + c.count, 0), data.items.length);
+});

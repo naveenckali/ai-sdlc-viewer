@@ -24,7 +24,7 @@ header h1 { margin: 0; font-size: 17px; }
 .k-git, .k-hooks { background: #f8717133; color: #fca5a5; }
 .k-ci { background: #facc1533; color: #fde68a; }
 .k-scripts { background: #4ade8033; color: #86efac; }
-.k-specs, .k-generic { background: #94a3b833; color: #cbd5e1; }
+.k-specs, .k-generic, .k-other { background: #94a3b833; color: #cbd5e1; }
 .badge.local { background: #f59e0b26; color: #fcd34d; border: 1px solid #f59e0b55; }
 .badge.inferred { background: #fcd34d22; color: #fcd34d; border: 1px dashed #fcd34d88; margin-left: 0; }
 .badge.trig { margin-left: 0; color: var(--dim); }
@@ -64,7 +64,7 @@ section.detail { flex: 1; min-width: 0; padding: 16px 22px; overflow: auto; }
 .card ul { margin: 4px 0; padding-left: 18px; }
 .card p { margin: 0; }
 .quote-label { font-size: 11px; color: var(--dim); font-style: italic; }
-blockquote { margin: 4px 0 0; padding: 4px 12px; border-left: 3px solid var(--accent); color: var(--text); }
+blockquote { margin: 4px 0 0; padding: 4px 12px; border-left: 3px solid var(--accent); color: var(--text); white-space: pre-wrap; }
 .not-stated { color: var(--dim); font-style: italic; }
 .evidence, .reason { font-family: var(--mono); font-size: 12px; color: var(--dim); }
 .smalls { margin: 0 0 12px 2px; font-size: 12px; }

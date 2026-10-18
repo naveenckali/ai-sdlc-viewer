@@ -289,6 +289,7 @@ test('graph layout bends an edge that would cross a node in the same column', ()
   tab(root, 'Skills Graph');
   const cy = window.__cy;
   assert.ok(cy.$id('db-migrator').edgesTo(cy.$id('lint')).hasClass('detour'), 'a -> c is bent around b');
+  assert.strictEqual(Math.abs(cy.$id('db-migrator').edgesTo(cy.$id('lint')).data('detour')) % 60, 0);
   assert.ok(!cy.$id('db-migrator').edgesTo(cy.$id('style-rule')).hasClass('detour'));
   assert.deepStrictEqual(straightEdgeCrossesNode(cy), []);
 });
@@ -325,7 +326,12 @@ test('index.html: title, app div, script order, no network references in shipped
   const doc = new JSDOM(html).window.document;
   assert.strictEqual(doc.title, 'AI SDLC Skills/Spec Viewer');
   assert.ok(doc.getElementById('app'));
-  const srcs = [...doc.querySelectorAll('script')].map(s => s.getAttribute('src'));
+  const all = [...doc.querySelectorAll('script')];
+  // inline guards around data.js: flag a load error, then stop listening
+  assert.ok(!all[0].src && all[0].textContent.includes('AI_SDLC_DATA_BROKEN'));
+  assert.strictEqual(all[1].getAttribute('src'), 'data.js');
+  assert.ok(!all[2].src && all[2].textContent.includes('window.onerror = null'));
+  const srcs = all.filter(s => s.getAttribute('src')).map(s => s.getAttribute('src'));
   assert.deepStrictEqual(srcs, ['data.js', 'vendor/cytoscape.min.js', 'lib/escape.js', 'lib/secrets.js',
     'lib/validate.js', 'lib/model.js', 'lib/graph.js', 'lib/chains.js', 'app.js']);
   assert.ok(doc.querySelector('script[src="data.js"]').getAttribute('onerror').includes('AI_SDLC_DATA_MISSING'));
@@ -357,4 +363,92 @@ test('offline: vendored cytoscape has no fetch/XHR calls and keeps its license',
   assert.ok(!/\bfetch\(|XMLHttpRequest|importScripts|WebSocket|sendBeacon/.test(cy));
   const lic = fs.readFileSync(path.join(VIEWER, 'vendor/LICENSE-cytoscape.txt'), 'utf8');
   assert.ok(lic.includes('Permission is hereby granted, free of charge'));
+});
+
+test('detourDistance tries +-60, +-120, ... and returns the first offset whose curve clears every node', () => {
+  const { window } = setup(undefined);
+  const dd = window.AISV.app._detourDistance;
+  const a = { x: 0, y: 0 }, b = { x: 0, y: 200 };
+  // one node on the line: +-60 already clears it
+  assert.strictEqual(Math.abs(dd(a, b, [{ x: 0, y: 100 }], 20)), 60);
+  // nodes on the line and where both 60-offset curves peak (30px out): needs 120
+  const blockers = [{ x: 0, y: 100 }, { x: 30, y: 100 }, { x: -30, y: 100 }];
+  const d = dd(a, b, blockers, 20);
+  assert.strictEqual(Math.abs(d), 120);
+  // independent check of the chosen curve (quadratic bezier, control point at the
+  // midpoint pushed d along the left normal of a->b, as cytoscape's unbundled-bezier does)
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  const c = { x: (a.x + b.x) / 2 - (b.y - a.y) / len * d, y: (a.y + b.y) / 2 + (b.x - a.x) / len * d };
+  for (let i = 0; i <= 64; i++) {
+    const t = i / 64;
+    const p = { x: (1 - t) ** 2 * a.x + 2 * (1 - t) * t * c.x + t * t * b.x, y: (1 - t) ** 2 * a.y + 2 * (1 - t) * t * c.y + t * t * b.y };
+    for (const n of blockers) assert.ok(Math.hypot(p.x - n.x, p.y - n.y) >= 20, 'curve at t=' + t + ' hits ' + JSON.stringify(n));
+  }
+});
+
+test('duplicate ids: every row is listed and selectable by position, ADLC lists both', () => {
+  const data = freshData();
+  const twin = JSON.parse(JSON.stringify(data.items.find(i => i.id === 'db-migrator')));
+  twin.name = 'db-migrator-twin';
+  data.items.push(twin);
+  const { root } = setup(data);
+  const rows = [...root.querySelectorAll('.item')].filter(r => r.textContent.includes('db-migrator'));
+  assert.strictEqual(rows.length, 2);
+  const row = rows.find(r => r.textContent.includes('twin'));
+  row.click();
+  assert.ok(root.querySelector('.detail h2').textContent.includes('db-migrator-twin'));
+  const on = root.querySelectorAll('.item.on');
+  assert.strictEqual(on.length, 1);
+  assert.ok(on[0].textContent.includes('twin'));
+  assert.ok(root.querySelector('.warnings').textContent.includes('duplicate item id'));
+  tab(root, 'ADLC Phase Map');
+  assert.ok(root.textContent.includes('db-migrator-twin'));
+});
+
+test('a graph library failure shows a message instead of a blank pane', () => {
+  const { root } = setup(freshData(), { beforeLibs(window) {
+    window.cytoscape = function () { throw new Error('boom'); };
+  } });
+  tab(root, 'Skills Graph');
+  assert.ok(root.querySelector('.graph-pane').textContent.includes('The graph could not be drawn: boom'));
+});
+
+test('ownDescription blockquote keeps line breaks (pre-wrap)', () => {
+  const css = fs.readFileSync(path.join(VIEWER, 'viewer.css'), 'utf8');
+  assert.match(css, /blockquote\s*\{[^}]*white-space:\s*pre-wrap/);
+});
+
+// Load the real index.html from disk with a given data.js, as a browser would over file://.
+function loadPage(dataJs) {
+  const os = require('node:os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aisv-page-'));
+  fs.cpSync(VIEWER, dir, { recursive: true });
+  if (dataJs !== null) fs.writeFileSync(path.join(dir, 'data.js'), dataJs);
+  return JSDOM.fromFile(path.join(dir, 'index.html'), { runScripts: 'dangerously', resources: 'usable' })
+    .then(dom => new Promise(resolve => {
+      windows.push(dom.window);
+      dom.window.addEventListener('load', () => resolve({ dom, dir }));
+    }));
+}
+
+test('index.html: a data.js syntax error says data.js could not be read', async () => {
+  const { dom, dir } = await loadPage('window.AI_SDLC_DATA = { "meta": ');
+  const text = dom.window.document.getElementById('app').textContent;
+  fs.rmSync(dir, { recursive: true, force: true });
+  assert.ok(text.includes('data.js could not be read'), text);
+  assert.ok(!text.includes('No scan data found'));
+});
+
+test('index.html: a missing data.js still says no scan data found', async () => {
+  const { dom, dir } = await loadPage(null);
+  const text = dom.window.document.getElementById('app').textContent;
+  fs.rmSync(dir, { recursive: true, force: true });
+  assert.strictEqual(text.trim(), 'No scan data found. Run /ai-sdlc-viewer in this repo to generate it.');
+});
+
+test('index.html: a valid data.js renders', async () => {
+  const { dom, dir } = await loadPage(fs.readFileSync(FIXTURE, 'utf8'));
+  const text = dom.window.document.getElementById('app').textContent;
+  fs.rmSync(dir, { recursive: true, force: true });
+  assert.ok(text.includes('9 items'), text.slice(0, 200));
 });

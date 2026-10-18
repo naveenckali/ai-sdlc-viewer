@@ -13,7 +13,8 @@
     script: 'scripts', plugin: 'plugins', spec: 'specs', submodule: 'submodules', other: 'other' };
   var CHIPS = [
     ['claude', 'Claude'], ['cursor', 'Cursor'], ['copilot', 'Copilot'], ['codex', 'Codex'],
-    ['mcp', 'MCP'], ['hooks', 'Hooks'], ['ci', 'CI'], ['scripts', 'Scripts'], ['specs', 'Specs']
+    ['mcp', 'MCP'], ['hooks', 'Hooks'], ['ci', 'CI'], ['scripts', 'Scripts'], ['specs', 'Specs'],
+    ['other', 'Other']
   ];
   var KIND_CHIP = { 'mcp-server': 'mcp', hook: 'hooks', workflow: 'ci', script: 'scripts', spec: 'specs' };
   var LIGHT_LABEL = 'Other scripts & workflows';
@@ -23,14 +24,14 @@
   function chipKey(item) {
     if (KIND_CHIP[item.kind]) return KIND_CHIP[item.kind];
     if (['claude', 'cursor', 'copilot', 'codex'].indexOf(item.ecosystem) >= 0) return item.ecosystem;
-    return null;
+    return 'other'; // cross-tool, git, ci and generic items of other kinds: every item is in exactly one chip
   }
 
   function chips(data) {
     var counts = {};
     ((data && data.items) || []).forEach(function (it) {
       var k = chipKey(it);
-      if (k) counts[k] = (counts[k] || 0) + 1;
+      counts[k] = (counts[k] || 0) + 1;
     });
     return CHIPS.filter(function (c) { return counts[c[0]] > 0; })
       .map(function (c) { return { key: c[0], label: c[1], count: counts[c[0]] }; });

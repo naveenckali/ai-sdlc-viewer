@@ -38,7 +38,7 @@ PowerShell: `install/install.ps1 -Tool <tool> [-Project <repo>]`. Each tool also
 | Cursor (not yet verified) | `~/.cursor/skills/ai-sdlc-viewer/` | `.cursor/skills/ai-sdlc-viewer/` | `/` in Agent chat, pick `ai-sdlc-viewer` |
 | Codex (smoke test passed) | `~/.agents/skills/ai-sdlc-viewer/` | `.agents/skills/ai-sdlc-viewer/` | `$ai-sdlc-viewer` or `/skills` |
 
-The per-repo fallback copies the skill into the repo being scanned. The copy carries a `.ai-sdlc-viewer-plugin` marker, so the scan never reports it as part of your repo; you may still want to commit or ignore it. See [docs/tool-support.md](docs/tool-support.md) for sources and for which tools have been smoke-tested (Claude Code: pass. Codex: pass. Copilot CLI: failed, 7 of 76 checks, see "Cross-tool smoke tests" in that file. Cursor and Copilot in VS Code: `not yet verified`).
+The per-repo fallback copies the skill into the repo being scanned. The copy carries a `.ai-sdlc-viewer-plugin` marker, so the scan never reports it as part of your repo; you may still want to commit or ignore it. See [docs/tool-support.md](docs/tool-support.md) for sources and for which tools have been smoke-tested (Claude Code: pass, 100 checks, after the final-review fixes. Codex: pass, before those fixes. Copilot CLI: failed, 7 of 76 checks, before those fixes; the re-run could not start (no supported model available), see "Cross-tool smoke tests" in that file. Cursor and Copilot in VS Code: `not yet verified`).
 
 ## Usage
 

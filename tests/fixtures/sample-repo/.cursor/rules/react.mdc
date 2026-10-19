@@ -1,0 +1,9 @@
+---
+description: React component conventions for this repo.
+globs: src/**/*.tsx
+alwaysApply: false
+---
+
+- Use function components and hooks, never class components.
+- Keep one exported component per file, named like the file.
+- Put component styles in a sibling `*.module.css` file.

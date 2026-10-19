@@ -1,0 +1,13 @@
+{
+  "name": "ai-sdlc-viewer",
+  "owner": { "name": "naveenckali" },
+  "description": "Marketplace for the AI SDLC Skills/Spec Viewer plugin.",
+  "plugins": [
+    {
+      "name": "ai-sdlc-viewer",
+      "source": "./",
+      "description": "Scan a repo's AI and SDLC tooling and SDD specs into an offline AI SDLC Skills/Spec Viewer page.",
+      "version": "0.1.0"
+    }
+  ]
+}

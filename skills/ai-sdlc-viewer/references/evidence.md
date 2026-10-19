@@ -1,0 +1,62 @@
+# Evidence: links and triggers
+
+A link says one item is connected to another. Inventing a link is one of the three worst outcomes, so every link is backed by a quote, or explicitly marked as inferred.
+
+## 1. Link types
+
+| type | Meaning | Direction | Example |
+|---|---|---|---|
+| `calls` | One item invokes or uses another as part of its work | caller → called | `review-pr/SKILL.md` line 42 says `then invoke the db-migrator agent` → link `review-pr` → `db-migrator` |
+| `handoff` | One item's output becomes the next item's input | producer → consumer | a spec says `Next step: run /plan-feature with this spec` → link `checkout-spec` → `plan-feature` |
+| `triggers` | One item starts another without calling it as a step (an event, a hook, a workflow run) | starter → started | `deploy.yml` has `workflow_run: workflows: ["CI"]` → link `workflow-ci` → `workflow-deploy`; a Claude hook entry whose `command` runs `scripts/format.sh` → link `hook-post-tool-use-format` → `format` (the script is always its own item; see classification.md §3) |
+
+More `calls` examples: a workflow step `run: npm run release` (workflow → `release` script); a `.husky/pre-commit` line `npm test` (git hook → `test` script); `uses: ./.github/workflows/build.yml` (caller workflow → reusable workflow); a command that says `Use the reviewer subagent`.
+
+Pick the type the quote supports. If the quote says "run X", it is `calls`. If it says "pass the output to X" or "X uses the plan this produces", it is `handoff`.
+
+## 2. Evidence rules
+
+- **A link requires a quote copied from the file that names or invokes the other item (or that passes output to it).** The quote names the other item by its name, command, path, or script name.
+- A non-inferred link has `inferred: false` and `evidence: {path, line, quote}`:
+  - `path`: the repo-relative POSIX path of the file the quote is in (usually a file of the `from` item).
+  - `line`: **the evidence `line` is 1-based** (the first line of the file is line 1). It is the line where the quote starts. Take it only from a tool that prints line numbers (a numbered file view, `grep -n`); never count by hand; frontmatter lines count.
+  - `quote`: text copied exactly from that line, short (one line, the words that create the link). Don't paraphrase or join lines. The one allowed change is redaction: secret values are replaced with `[redacted]` (see redaction.md). Never paraphrase a quote to avoid a secret.
+- **Scripts are always their own items.** Any script, `scripts/`/`bin/`/`tools/` file, Makefile target, `package.json` script, or file a hook or workflow runs is a separate item, and the thing that runs it gets a link to it. Only non-runnable support files in a skill's or agent's own folder fold into that item (classification.md §3).
+- Both `from` and `to` must be ids of items you are writing. If the other end isn't an item (for example a third-party action, an external service), don't write a link; mention it in `whatItDoes` instead.
+- One link per pair and type. If several lines support it, quote the clearest one.
+
+## 3. Inferred links
+
+**When the relationship is only implied (shared folder, similar names, one output format matching another's input without naming it), either omit the link or set `inferred:true` with a `reason`.**
+
+- An inferred link has `inferred: true` and a `reason` stating what you saw, for example `plan-feature writes plan.md and review-plan reads "the latest plan", but neither names the other`. Don't add `evidence` you can't quote.
+- The viewer draws inferred links dashed, labeled "inferred", and the reader can toggle them off. Still, omit rather than infer when the hint is weak.
+- **Never invent a link from naming similarity alone.** `lint-fix` and `lint` are not linked unless a file says one runs the other.
+- Two items in the same folder are not linked by that fact.
+
+## 4. Triggers (on items)
+
+Triggers say what starts an item. They go in the item's `triggers` array, not in `links` (the viewer draws them as entry-point nodes). Each is `{type, detail, evidence}`. **Every trigger except `user-command` must carry `evidence`** `{path, line, quote}`: the line that states the trigger (an `on:` key, a hook event name, a `globs:` / `applyTo:` / `alwaysApply:` line, a cron line). A trigger no line states is left out. The viewer draws each trigger as an entry step in the graph and chains, so an unquoted trigger would be an unproven step. (The validator warns about a trigger without evidence.)
+
+| type | Use for | Example `detail` |
+|---|---|---|
+| `user-command` | A user types a command or picks the item (slash commands, prompt files, `npm run x`, `make x`, a manual `workflow_dispatch` run) | `/review-pr` |
+| `git-event` | Git hooks | `pre-commit` |
+| `ci-event` | CI events such as `push`, `pull_request`, `workflow_run`, `release`, merge requests | `push to main` |
+| `webhook` | External callers (see below) | `issue_comment` |
+| `ai-hook-event` | AI-tool hook events (`PreToolUse`, `PostToolUse`, `SessionStart`, `Stop`, Cursor hook events) | `PostToolUse (Edit\|Write)` |
+| `schedule` | Cron and scheduled runs | `cron 0 3 * * *` |
+| `other` | Anything else a line of the item's own files states that starts or loads it, such as "always loaded by Copilot" or a `globs:` value. Being called by another item is a link, not a trigger. Each `other` trigger is its own entry node (identical wording on two items doesn't join them) | `Loaded automatically for *.ts files` |
+
+- **CI triggers come from the `on:` keys** of a GitHub workflow (or `rules:` / `only:` / `workflow:` in GitLab, `trigger:` / `pr:` / `schedules:` in Azure Pipelines). Write one trigger per key, with the `on:` line as evidence.
+- **`repository_dispatch`, `workflow_dispatch` with external callers, `issue_comment`, `pull_request_target`, and generic webhook receivers are type `webhook`.** A `workflow_dispatch` is a webhook only when a file shows it is called from outside (an API call, another repo, a bot); otherwise it is `user-command` with detail `manual run (workflow_dispatch)`. A generic webhook receiver is any script or server in the repo whose file says it receives webhook/HTTP callbacks to start tooling.
+- Use the same `detail` wording for the same event across items, so they share one entry node (all types except `other`).
+- Rules and instructions files that a tool loads automatically get a trigger of type `other` stating when they load (for example their `globs:` or `applyTo:` value), with that line as evidence. If the file doesn't say, use `[]`.
+
+## 5. Self-verification
+
+Before writing `data.js`:
+
+1. For every non-inferred link and every trigger with evidence, re-open `evidence.path` and find `evidence.quote` at `evidence.line`, allowing ±2 lines. Compare **exactly, apart from `[redacted]` spans**: each `[redacted]` in the quote stands for the secret value at that spot in the file, and everything else must match character for character.
+2. If the quote is there but at another line, fix the line. If the text differs outside the `[redacted]` spans, copy the exact text from the file again, **then redact it again** (redaction.md) before keeping it. If you can't find it, drop the link, or keep it as `inferred: true` with an honest `reason`.
+3. Confirm `from` and `to` are both item ids, and the quote really names or invokes the `to` item (for `calls`/`triggers`) or passes output to it (for `handoff`).

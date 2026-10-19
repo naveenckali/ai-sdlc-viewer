@@ -1,0 +1,16 @@
+{
+  "name": "sample-repo",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "eslint src",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test",
+    "ai:review": "claude -p \"/review-pr $PR_NUMBER\" --allowedTools Read,Grep,Glob"
+  },
+  "devDependencies": {
+    "eslint": "^9.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0"
+  }
+}

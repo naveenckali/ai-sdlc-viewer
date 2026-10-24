@@ -56,7 +56,7 @@ For each item, from its own files only:
   - `summary`: one or two sentences in your own words, restating what the file says the item does. No guessing at intent.
   - `whatItDoes`: short bullets, each traceable to the file.
   - `inputs` / `outputs`: only what the file names (arguments, files read, files written, results returned). For non-spec items, `[]` when silent.
-  - `triggers`: what starts the item (see `references/evidence.md` for trigger types). Every trigger except `user-command` needs `evidence` `{path, line, quote}`: the line that states it. If no line states it, leave that trigger out. Use identical `detail` text for the same event on different items (for example `push to main`) so the graph shares one trigger node.
+  - `triggers`: what starts the item (see `references/evidence.md` for trigger types). Every trigger except `user-command` needs `evidence` `{path, line, quote}`: the line that states it. If no line states it, leave that trigger out, with one exception: a git hook file is started by its own name and folder (see `references/evidence.md` §4). Use identical `detail` text for the same event on different items (for example `push to main`) so the graph shares one trigger node.
   - `invocation`: only when the file shows how a user calls it (a slash command, a CLI usage line, an `argument-hint`). Split it into `parts` with role `literal`, `required` (shown green), or `optional` (shown red). Otherwise null.
   - `sdlcRole`: a few plain words for its role in the lifecycle (for example `code review`, `release`), or null if the file doesn't make it clear.
 - **For specs, the summary is the purpose/goal** the spec states. A spec's `inputs` (what it starts from) and `outputs` (what it produces) must be non-empty: use `["Not stated in the file"]` when the spec is silent.
@@ -95,7 +95,7 @@ Follow `references/redaction.md` across every string you are about to write: sum
 Do every check. Fix what fails, then check again.
 
 - **Re-open each evidence path and confirm the quote appears at that line (±2 lines).** This covers link evidence and trigger evidence. Read the line number from a tool that prints it (numbered file view, `grep -n`); never count by hand; frontmatter lines count. Compare exactly, apart from `[redacted]` spans (each one stands for the secret at that spot). Fix the line or quote (re-copy, then redact again), or drop the link, or mark the link inferred with a reason.
-- Confirm every trigger except `user-command` has `evidence`; drop any that has none.
+- Confirm every trigger except `user-command` has `evidence`; drop any that has none, except a git hook's `git-event` trigger kept under the rule in `references/evidence.md` §4.
 - **Confirm every candidate is accounted for**: each `meta.candidates` entry appears exactly in some item's `paths` or as an `unclassified[].path`, and every item path and unclassified path is in `meta.candidates`.
 - **Confirm ids are unique and every link endpoint exists** in `items`.
 - **Confirm no path contains `\` or starts with `/` or a drive letter** (`C:`). This applies to item paths, evidence paths, unclassified paths, and candidates. Only `meta.source` may be absolute.
@@ -119,7 +119,8 @@ Do it in this order:
 1. **Check the folder first; never delete anything.** If `ai-sdlc-viewer/` exists at the repo root, list it and its subfolders. If it holds anything besides those 12 files and the `lib/` and `vendor/` folders, stop and ask the user what to do: it may be the plugin itself or someone's own files. Never run `rm`, `rm -rf`, `Remove-Item`, `del`, or any other delete. A re-run overwrites the 12 files in place.
 2. **Create the folders if missing**: `ai-sdlc-viewer/`, `ai-sdlc-viewer/lib/`, `ai-sdlc-viewer/vendor/` (for example `mkdir -p ai-sdlc-viewer/lib ai-sdlc-viewer/vendor`).
 3. **Write `ai-sdlc-viewer/data.js`** directly at that path, as `window.AI_SDLC_DATA = <JSON>;` where `<JSON>` is one object with `meta`, `phases`, `items`, `links`, and `unclassified`.
-   - It must be pure JSON (UTF-8, double-quoted keys and strings, no comments, no trailing commas, `"` `\` and line breaks escaped inside strings). Produce it with a JSON serializer when your tool has one you may use without writing a helper file; never build it by string concatenation.
+   - Write it with your tool's own file-write action. Don't run a command, script, or one-liner to produce it.
+   - It must be pure JSON (UTF-8, double-quoted keys and strings, no comments, no trailing commas, `"` `\` and line breaks escaped inside strings). Escape every string value you copied from the repo with care: it may contain quotes, backslashes, `</script>`, or markup.
    - `meta`:
      - `title`: `"AI SDLC Skills/Spec Viewer"`
      - `schemaVersion`: `"1"` (a string)
@@ -128,11 +129,11 @@ Do it in this order:
      - `scannedBy`: set to the tool you are running in (for example `"Claude Code"`, `"GitHub Copilot (VS Code)"`, `"Copilot CLI"`, `"Cursor"`, `"Codex"`)
      - `git`: true if the repo is a git repository, else false
      - `candidates`: the list from step 3
-   - Re-open `data.js` and confirm the payload parses: the file is exactly `window.AI_SDLC_DATA = ` + one JSON object + `;`. If you may run a JSON parser on it without writing a helper file, do.
+   - Re-open `data.js` and read it back: the file is exactly `window.AI_SDLC_DATA = ` + one JSON object + `;`, with balanced braces and brackets and every string closed. Fix it with the same file-write action if not.
 4. **Copy the 11 viewer files from `SKILL_DIR/viewer/` unchanged.** Never edit, reformat, hand-write, or regenerate them. Pick one copy form before you start and use only that: one plain `cp` per file with the real absolute source path spelled out, for example `cp "/real/path/viewer/lib/graph.js" "ai-sdlc-viewer/lib/graph.js"`, or your tool's own file-copy action if it has one.
 5. List `ai-sdlc-viewer/`, `ai-sdlc-viewer/lib/` and `ai-sdlc-viewer/vendor/` and confirm all 12 files are there.
 
-**If a copy (or any other command or write) is refused or blocked, stop there.** Trying another form (`cp -R`, `Copy-Item`, `robocopy`, `xcopy`, a script, or reading the files and writing them back) is routing around the refusal. Tell the user the copy was not permitted and print the commands for them to run: one `cp "<source>" "<destination>"` line per missing file, with absolute, forward-slash, double-quoted paths (for example `cp "C:/Users/me/.claude/skills/ai-sdlc-viewer/viewer/app.js" "C:/work/repo/ai-sdlc-viewer/app.js"`), which runs as-is in bash, zsh, Git Bash and PowerShell.
+**If a viewer copy is refused or blocked, stop copying.** Keep the `data.js` you already wrote. Trying another form (`cp -R`, `Copy-Item`, `robocopy`, `xcopy`, a script, or reading the files and writing them back) is routing around the refusal. Tell the user the copy was not permitted and print the commands for them to run: one `cp "<source>" "<destination>"` line per missing file, with absolute, forward-slash, double-quoted paths (for example `cp "C:/Users/me/.claude/skills/ai-sdlc-viewer/viewer/app.js" "C:/work/repo/ai-sdlc-viewer/app.js"`), which runs as-is in bash, zsh, Git Bash and PowerShell.
 
 ## 11. Report
 

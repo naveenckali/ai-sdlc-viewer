@@ -38,6 +38,12 @@ Pick the type the quote supports. If the quote says "run X", it is `calls`. If i
 
 Triggers say what starts an item. They go in the item's `triggers` array, not in `links` (the viewer draws them as entry-point nodes). Each is `{type, detail, evidence}`. **Every trigger except `user-command` must carry `evidence`** `{path, line, quote}`: the line that states the trigger (an `on:` key, a hook event name, a `globs:` / `applyTo:` / `alwaysApply:` line, a cron line). A trigger no line states is left out. The viewer draws each trigger as an entry step in the graph and chains, so an unquoted trigger would be an unproven step. (The validator warns about a trigger without evidence.)
 
+**Git hooks are the one exception.** Git runs a hook because of the file's own name in a hooks folder (`.git/hooks/`, `.husky/`, `.githooks/`, or the folder `core.hooksPath` names), so no line inside it states the trigger. For such a file:
+
+- If a line sets the hooks folder (a `git config core.hooksPath ...` line, a husky `"prepare": "husky"` script, a `lefthook.yml` / `.pre-commit-config.yaml` entry naming the hook), use that line as the evidence.
+- Otherwise keep the `git-event` trigger with no `evidence`, and a `detail` that names the hook and says how it is known, for example `pre-commit (hook file name)`. Accept the validator's warning.
+- Never use the hook's shebang or first line as evidence: it doesn't state the trigger.
+
 | type | Use for | Example `detail` |
 |---|---|---|
 | `user-command` | A user types a command or picks the item (slash commands, prompt files, `npm run x`, `make x`, a manual `workflow_dispatch` run) | `/review-pr` |

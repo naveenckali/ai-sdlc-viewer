@@ -100,6 +100,7 @@ Notes from earlier runs:
 - **In run 6 the agent also wrote a helper validation script to `%TEMP%`**, which was possible because `Write` was pre-approved. Since then `Write` and `Edit` are no longer pre-approved, and SKILL.md forbids creating files outside the repo or writing helper files for the optional validation. A probe confirmed that, without `Write` pre-approved, writes inside the repo still work and writes to `%TEMP%` are refused.
 - **Run 7** (`PASS 85 checks`) was the first made with the committed runner and the shipped skill text, before the final-review fix wave.
 - **Run `final1`** is the final result above.
+- **Run `fix2`** (2026-10-24, Claude Code 2.1.303, `PASS 100 checks`, 192 s, 61 turns, $1.19) confirms the follow-up skill fix: `data.js` is written with the tool's file-write action (no serializer command was attempted), and the `.husky/pre-commit` hook keeps its trigger as `pre-commit (hook file name)`. Its 13 denials were the skill-folder listing, the optional inline validation (skipped after the refusal), and the 11 per-file viewer `cp` commands, all refused. The harness then copied the viewer files. Transcript summary: `tmp-fixtures/e2e-fix2.json`.
 
 ## Cross-tool smoke tests (2026-10-18)
 
@@ -107,7 +108,7 @@ Run with `node tools/run-e2e.js <label> --tool copilot-cli|codex`. For each run 
 
 | Tool | Version | Result | Notes |
 |---|---|---|---|
-| Claude Code (plugin) | 2.1.303 | **PASS 100 checks** (run `final1`, final) | Harness copied the viewer files after Claude Code refused the `cp`; see above. (Run 7, 2.1.302: PASS 85 checks against the earlier fixture and checker.) |
+| Claude Code (plugin) | 2.1.303 | **PASS 100 checks** (run `final1`; reconfirmed by run `fix2` after the follow-up skill fix) | Harness copied the viewer files after Claude Code refused the `cp`; see above. (Run 7, 2.1.302: PASS 85 checks against the earlier fixture and checker.) |
 | Codex | codex-cli 0.159.3 | **PASS 86 checks** | `codex exec --sandbox workspace-write -C <fixture> '$ai-sdlc-viewer'`. 98 s. The agent copied all 11 viewer files itself (no harness copy) and its own validation reported no errors or warnings. |
 | Copilot CLI | GitHub Copilot CLI 1.0.100-1 | **FAIL, 7 of 76 checks** (run `copilot1`, before the fix wave). Re-run `copilot2` after the fix wave did not start: `copilot` exited after 3 s with `Error: No supported model available` (an account/model availability problem, not a skill result), so the fixed skill is **not yet verified** on Copilot CLI. | `copilot -p /ai-sdlc-viewer --no-ask-user -s --allow-tool=<each of: shell(git ls-files), shell(git rev-parse), shell(git config), shell(pwd), shell(date), shell(ls), shell(mkdir), shell(cp), shell(rm -rf ai-sdlc-viewer), write>` (the `rm` entry has since been removed from the harness). The skill loaded and produced a mostly correct `data.js`, but see the failures below. |
 | Cursor (GUI) | installed; `cursor-agent` CLI not installed | not yet verified | Manual checklist below. |
